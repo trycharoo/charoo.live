@@ -20,7 +20,7 @@ In another terminal:
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly, including its port and without a trailing slash. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
+Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly in production, including its port and without a trailing slash. Development also accepts the matching `localhost` or `127.0.0.1` origin on the same port. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
 
 Room invitation links open the join dialog automatically. Recipients can continue as guests or sign in with Google/email, then enter the invited room using their chosen nickname. Nickname is required; age and sex are optional. New guests keep these details private by default, and returning users retain their profile visibility setting. Google and email returns preserve the invitation until the recipient confirms their profile.
 

@@ -35,6 +35,31 @@ export const uuid = (value: string | undefined) =>
     .uuid()
     .transform((value) => value.toLowerCase())
     .parse(value);
+// Same-machine dev twin: Vite prints both http://localhost:5173 and
+// http://127.0.0.1:5173, but browsers treat them as different origins.
+// Outside production, accept the twin so either URL works.
+export function trustedOrigin(
+  env: Pick<Env, "WEB_ORIGIN" | "NODE_ENV">,
+  origin: string | undefined | null,
+): boolean {
+  if (!origin) return false;
+  if (origin === env.WEB_ORIGIN) return true;
+  if (env.NODE_ENV === "production") return false;
+  try {
+    const a = new URL(origin),
+      b = new URL(env.WEB_ORIGIN),
+      loopbacks = new Set(["localhost", "127.0.0.1"]);
+    return (
+      a.protocol === b.protocol &&
+      a.port === b.port &&
+      a.hostname !== b.hostname &&
+      loopbacks.has(a.hostname) &&
+      loopbacks.has(b.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
 export async function session(c: HttpContext) {
   const t = getCookie(c, "charoo_session");
   return t
@@ -95,7 +120,7 @@ export async function userRate(
 }
 export function socketRequest(c: HttpContext) {
   requireThat(
-    c.req.header("Origin") === c.env.WEB_ORIGIN,
+    trustedOrigin(c.env, c.req.header("Origin")),
     403,
     "Untrusted origin",
   );

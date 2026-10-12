@@ -16,6 +16,7 @@ import {
   body,
   rate,
   socketRequest,
+  trustedOrigin,
   type HttpEnv,
 } from "./context";
 import { authRoutes } from "../features/auth/routes";
@@ -39,7 +40,11 @@ app.use("*", async (c, next) => {
   if (/^\/api\/media\/[^/]+\/scan\/[^/]+\/(input|output)$/.test(c.req.path))
     return next();
   const origin = c.req.header("Origin");
-  requireThat(!origin || origin === c.env.WEB_ORIGIN, 403, "Untrusted origin");
+  requireThat(
+    !origin || trustedOrigin(c.env, origin),
+    403,
+    "Untrusted origin",
+  );
   if (origin) {
     c.header("Access-Control-Allow-Origin", origin);
     c.header("Access-Control-Allow-Credentials", "true");
@@ -51,7 +56,7 @@ app.use("*", async (c, next) => {
     return c.body(null, 204);
   }
   requireThat(
-    ["GET", "HEAD"].includes(c.req.method) || origin === c.env.WEB_ORIGIN,
+    ["GET", "HEAD"].includes(c.req.method) || trustedOrigin(c.env, origin),
     403,
     "Origin required",
   );
