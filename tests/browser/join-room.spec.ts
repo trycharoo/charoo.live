@@ -1,6 +1,70 @@
 import { expect, test, type Page } from "@playwright/test";
 import { visualFixture, visualIds } from "./visual-fixture";
 
+test("a visitor can unblock the host from their profile and retry the invitation", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  await visualFixture(context);
+  await profileResponse(page);
+  let blocked = true;
+  let deletedId: string | undefined;
+  await page.route("**/api/blocks", (route) =>
+    route.fulfill({
+      json: blocked ? [{ id: visualIds.peer, display_name: "Milo Hart" }] : [],
+    }),
+  );
+  await page.route("**/api/blocks/*", (route) => {
+    deletedId = new URL(route.request().url()).pathname.split("/").at(-1);
+    blocked = false;
+    return route.fulfill({ status: 204 });
+  });
+  await page.route("**/api/shared/join", (route) =>
+    route.fulfill(
+      blocked
+        ? {
+            status: 403,
+            json: {
+              error:
+                "You blocked this room’s host. Unblock them in Your profile → Blocked members to join.",
+            },
+          }
+        : {
+            json: {
+              pending: true,
+              roomId: visualIds.group,
+              requestId: "recovery-request",
+              title: "Coffee with friends",
+            },
+          },
+    ),
+  );
+  await openJoin(page);
+  await page
+    .getByLabel("Room invitation URL", { exact: true })
+    .fill(`${baseURL}/#room=${"d".repeat(43)}`);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText(
+    "Unblock them in Your profile",
+  );
+  await page.getByRole("button", { name: "Your profile", exact: true }).click();
+  await page.getByRole("button", { name: "Unblock", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Unblock", exact: true }),
+  ).toHaveCount(0);
+  expect(deletedId).toBe(visualIds.peer);
+  await page.getByRole("button", { name: "Your rooms", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Join this room", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(page.locator(".pending-banner")).toContainText(
+    "Request to join “Coffee with friends” is pending",
+  );
+});
+
 async function openJoin(page: Page) {
   await page.goto("/");
   await page

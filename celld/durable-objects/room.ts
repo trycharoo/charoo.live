@@ -330,11 +330,20 @@ export class Room extends DurableObject<Env> {
           403,
           "Verify your email to join",
         );
-        requireThat(
-          !(await blocked(env, u.id, r.creator_id)),
-          403,
-          "Room unavailable",
-        );
+        if (await blocked(env, u.id, r.creator_id)) {
+          const blockedByYou = await first(
+            env,
+            "SELECT 1 FROM blocks WHERE user_id=? AND target_id=?",
+            [u.id, r.creator_id],
+          );
+          requireThat(
+            false,
+            403,
+            blockedByYou
+              ? "You blocked this room’s host. Unblock them in Your profile → Blocked members to join."
+              : "Room unavailable",
+          );
+        }
         requireThat(
           u.verified || cfg.guest_access_enabled,
           403,
@@ -753,8 +762,9 @@ export class Room extends DurableObject<Env> {
             403,
             "Room owner required",
           );
-          const list = this.joinRequests()
-            .sort((a, b) => a.created_at.localeCompare(b.created_at));
+          const list = this.joinRequests().sort((a, b) =>
+            a.created_at.localeCompare(b.created_at),
+          );
           const out = [];
           for (const j of list) {
             const raw = await first(env, "SELECT * FROM users WHERE id=?", [
@@ -809,11 +819,9 @@ export class Room extends DurableObject<Env> {
             this.changed();
             this.event("room.changed");
             if (accept)
-              this.event(
-                "room.join_approved",
-                { title: this.meta().title },
-                [req.user_id],
-              );
+              this.event("room.join_approved", { title: this.meta().title }, [
+                req.user_id,
+              ]);
             else
               this.event(
                 "room.join_rejected",
@@ -1158,8 +1166,7 @@ export class Room extends DurableObject<Env> {
     await this.permit(actor);
     const self = this.participant(actor.userId)!;
     const { invite, purged, ...safe } = this.meta();
-    const isHost =
-      r.type === "SHARED_GROUP" && r.creator_id === actor.userId;
+    const isHost = r.type === "SHARED_GROUP" && r.creator_id === actor.userId;
     const allRequests = r.type === "SHARED_GROUP" ? this.joinRequests() : [];
     const pendingRequests = allRequests.filter((j) => j.status === "PENDING");
     let joinRequests: any[] | undefined;

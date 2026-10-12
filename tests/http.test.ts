@@ -32,6 +32,80 @@ async function request(
   );
 }
 describe("HTTP API", () => {
+  it("explains a visitor's own block, allows unblocking and preserves host block privacy", async () => {
+    const f = await fixture(),
+      host = await f.guest(),
+      visitor = await f.guest();
+    const created: any = await (
+      await request(
+        f,
+        "/rooms",
+        "POST",
+        { type: "SHARED_GROUP", title: "Block recovery room" },
+        host,
+      )
+    ).json();
+    const token = new URL(created.shareUrl).hash.slice(6);
+    expect(
+      (
+        await request(
+          f,
+          "/blocks",
+          "POST",
+          { targetId: host.actor.userId },
+          visitor,
+        )
+      ).status,
+    ).toBe(204);
+    const denied = await request(f, "/shared/join", "POST", { token }, visitor);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: expect.stringContaining("Unblock them in Your profile"),
+    });
+    const blocks: any = await (
+      await request(f, "/blocks", "GET", undefined, visitor)
+    ).json();
+    expect(blocks).toMatchObject([{ id: host.actor.userId }]);
+    expect(
+      (
+        await request(
+          f,
+          `/blocks/${blocks[0].id}`,
+          "DELETE",
+          undefined,
+          visitor,
+        )
+      ).status,
+    ).toBe(204);
+    const joined = await request(f, "/shared/join", "POST", { token }, visitor);
+    expect(joined.status).toBe(200);
+    expect(await joined.json()).toMatchObject({
+      pending: true,
+      roomId: created.id,
+    });
+    expect(
+      (
+        await request(
+          f,
+          "/blocks",
+          "POST",
+          { targetId: visitor.actor.userId },
+          host,
+        )
+      ).status,
+    ).toBe(204);
+    const deniedByHost = await request(
+      f,
+      "/shared/join",
+      "POST",
+      { token },
+      visitor,
+    );
+    expect(deniedByHost.status).toBe(403);
+    expect(await deniedByHost.json()).toMatchObject({
+      error: "Room unavailable",
+    });
+  });
   it("preserves case-insensitive Unicode discovery and canonical UUID deduplication", async () => {
     const f = await fixture(),
       u = await f.guest(true);

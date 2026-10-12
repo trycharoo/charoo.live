@@ -2025,14 +2025,16 @@ export function App() {
                 <h2>Blocked members</h2>
                 <div className="list">
                   {blocks.map((b) => (
-                    <div key={b.target_id}>
+                    <div key={b.id}>
                       <span>{b.display_name}</span>
                       <button
                         className="text-button"
+                        disabled={busy}
                         onClick={() =>
                           act(async () => {
-                            await api(`/blocks/${b.target_id}`, "DELETE");
+                            await api(`/blocks/${b.id}`, "DELETE");
                             await loadSocial();
+                            notify("Member unblocked.");
                           })
                         }
                       >
