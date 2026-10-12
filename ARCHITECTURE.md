@@ -517,14 +517,17 @@ Development and production share the same Worker environment declaration.
 
 Application environment variables belong to the Worker/application contract.
 
-Examples:
+Examples used by this application:
 
 ```text
-DATABASE_URL
-JWT_SIGNING_KEY
-PAYMENT_API_KEY
-LOG_LEVEL
+WEB_ORIGIN
+MESSAGE_KEY
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+RESEND_API_KEY
 ```
+
+The application uses D1 and Durable Object SQLite instead of PostgreSQL, Durable Objects and Queues instead of Redis, the `MEDIA` R2 binding instead of application S3 credentials, and Resend HTTP instead of SMTP. The original application's `DATABASE_URL`, `REDIS_URL`, `S3_*`, `SMTP_URL`, `PORT` and `TRUST_PROXY_CIDRS` settings are outside the Worker allowlist. Current provider groups and the migration mapping are documented in [README.md](./README.md#application-environment).
 
 Celld fleet/deployment configuration is separate.
 

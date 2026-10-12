@@ -49,6 +49,25 @@ Celld preserves its local state in `.celld/dev`. Development initializes the sam
 
 Use `pnpm run deploy` explicitly: pnpm also has its own unrelated `deploy` subcommand. Native flags pass through to Celld. `CELLD_ENV_FILE` selects an application env file; process variables override it. `CELLD_CONFIG` can select a local development config. Host-only overrides stay outside Worker bindings.
 
+## Application environment
+
+`celld/env.ts` declares the current application environment. `WEB_ORIGIN` and `MESSAGE_KEY` are required; `NODE_ENV` selects development or production behavior. Preserve `MESSAGE_KEY` while keeping the same Celld data: existing encrypted messages and room invitations depend on it. Local and production stores do not need a shared key just because the original app used a shared Supabase database.
+
+The templates leave optional provider groups commented out. Uncomment and fill a complete group when enabling Google, Resend, scanning, video or AI. These integrations still use their credentials in the Celld implementation.
+
+When carrying an environment file over from the original application, remove the obsolete application settings:
+
+| Original settings | Current configuration |
+| ----------------- | --------------------- |
+| `DATABASE_URL` | D1 and Durable Object SQLite bindings in `wrangler.jsonc` |
+| `REDIS_URL` | Durable Objects, alarms and Queues |
+| `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION` | The `MEDIA` R2 binding; fleet object-store credentials stay in the CLI/node environment |
+| `SMTP_URL` | `RESEND_API_KEY` and `EMAIL_FROM` for production email; Mailpit for local email |
+| `PORT` | Celld listens on port 9876 and Vite on 5173 by default; use their CLI options to override |
+| `TRUST_PROXY_CIDRS` | `TRUSTED_CLIENT_IP_HEADER`, set only behind ingress that strips and supplies that header |
+
+`selectWorkerEnvironment` ignores variables outside the allowlist when generating Worker bindings. Remove obsolete credentials from private application env files as well, so those files describe only the services this app uses.
+
 ## Architecture and API
 
 [ARCHITECTURE.md](./ARCHITECTURE.md) describes authorities, recovery and the retained Celld conventions.
