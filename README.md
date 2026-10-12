@@ -24,6 +24,8 @@ Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to 
 
 Room invitation links open the join dialog automatically. Recipients can continue as guests or sign in with Google/email, then enter the invited room using their chosen nickname. Nickname is required; age and sex are optional. New guests keep these details private by default, and returning users retain their profile visibility setting. Google and email returns preserve the invitation until the recipient confirms their profile.
 
+Use **Join a room** on the home screen or in the main navigation to paste a full invitation URL. The app validates the link and continues through the same guest/sign-in and nickname confirmation flow. Rooms that require host approval keep that requirement, and closed or expired invitations are rejected by the server.
+
 Inside a room, the left sidebar shows members, invitation tools, and host controls. Back restores the main navigation; on mobile, the Members button opens the same sidebar. Hosts can mute members for 30 minutes or unmute them immediately. Muted members can read but cannot send messages, reactions, or attachments. Block/Unblock hides or restores a person's messages for the user who clicks it and stops private interactions.
 
 Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's dark Lavender theme.

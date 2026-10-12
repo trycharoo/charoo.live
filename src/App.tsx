@@ -1,5 +1,6 @@
 import { Realtime } from "./realtime";
 import { RoomSidebar } from "./RoomSidebar";
+import { JoinRoomForm } from "./JoinRoomForm";
 import { ThemeSettings } from "./ThemeSettings";
 import { useTheme } from "./useTheme";
 import {
@@ -1001,6 +1002,22 @@ export function App() {
     }
   };
   const hasRoomInvite = new URLSearchParams(location.hash.slice(1)).has("room");
+  const openJoinRoom = () => {
+    setCreateAfterGuest(false);
+    setMobileNav(false);
+    setModal("joinUrl");
+  };
+  const joinRoomFromUrl = (token: string) => {
+    window.history.replaceState(
+      null,
+      "",
+      `${location.pathname}${location.search}#${new URLSearchParams({ room: token })}`,
+    );
+    setJoinProfilePending(true);
+    setCreateAfterGuest(false);
+    choosePage("groups");
+    setModal(userRef.current ? "joinProfile" : "guest");
+  };
   const request = (targetId: string, kind: string) =>
     act(async () => {
       await api("/requests", "POST", {
@@ -1186,6 +1203,9 @@ export function App() {
                   )}
                 </button>
               ))}
+              <button onClick={openJoinRoom}>
+                <Link size={20} /> <span>Join a room</span>
+              </button>
             </nav>
             <div className="sidebar-rooms">
               <div className="eyebrow">ACTIVE CONVERSATIONS</div>
@@ -1425,6 +1445,9 @@ export function App() {
                 >
                   <Plus size={18} />
                   {hasRoomInvite ? "Join this room" : "Start a room"}
+                </button>
+                <button className="button secondary" onClick={openJoinRoom}>
+                  <Link size={17} /> Join a room
                 </button>
                 <span>You host. You moderate. The room expires.</span>
               </div>
@@ -2841,27 +2864,29 @@ export function App() {
       {modal && (
         <Modal
           title={
-            modal === "guest"
-              ? hasRoomInvite
-                ? "Join this room"
-                : "A room starts with you"
-              : modal === "email"
-                ? "Sign in to Charoo"
-                : modal === "joinProfile"
+            modal === "joinUrl"
+              ? "Join a room"
+              : modal === "guest"
+                ? hasRoomInvite
                   ? "Join this room"
-                  : modal === "share"
-                    ? "Your room is ready"
-                    : modal === "invite"
-                      ? "Invite people to your room"
-                      : modal === "report"
-                        ? "Help keep Charoo safe"
-                        : modal === "editRoom"
-                          ? "Your room, your topic"
-                          : modal === "public"
-                            ? "Start a public conversation"
-                            : modal === "kick"
-                              ? `Remove ${kickTarget?.name || "member"}`
-                              : "Create your room"
+                  : "A room starts with you"
+                : modal === "email"
+                  ? "Sign in to Charoo"
+                  : modal === "joinProfile"
+                    ? "Join this room"
+                    : modal === "share"
+                      ? "Your room is ready"
+                      : modal === "invite"
+                        ? "Invite people to your room"
+                        : modal === "report"
+                          ? "Help keep Charoo safe"
+                          : modal === "editRoom"
+                            ? "Your room, your topic"
+                            : modal === "public"
+                              ? "Start a public conversation"
+                              : modal === "kick"
+                                ? `Remove ${kickTarget?.name || "member"}`
+                                : "Create your room"
           }
           onClose={() => {
             setModal(null);
@@ -2893,7 +2918,9 @@ export function App() {
               </div>
             </div>
           )}
-          {modal === "guest" ? (
+          {modal === "joinUrl" ? (
+            <JoinRoomForm onJoin={joinRoomFromUrl} />
+          ) : modal === "guest" ? (
             <form onSubmit={startGuest}>
               <p>
                 {hasRoomInvite
