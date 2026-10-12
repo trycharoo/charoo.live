@@ -137,6 +137,7 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
   page,
   browser,
 }) => {
+  test.slow();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
@@ -225,12 +226,6 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
     await expect(
       guestPage.getByRole("heading", { name: "Host controls" }),
     ).toHaveCount(0);
-    await expect(
-      guestPage.getByRole("button", {
-        name: "Invite people to room",
-        exact: true,
-      }),
-    ).toHaveCount(0);
     const guest = await (
       await guestPage.request.get(`${new URL(inviteUrl).origin}/api/me`)
     ).json();
@@ -239,6 +234,123 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
       profile: { age: null, gender: "", aslVisibility: "private" },
     });
     await expect.poll(() => new URL(guestPage.url()).hash).toBe("");
+    await expect(
+      guestPage.getByRole("button", {
+        name: "Invite people to room",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("navigation", { name: "Main navigation", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("region", { name: "Room members", exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".chat .participants")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Mute Coffee guest", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Unmute Coffee guest", exact: true }),
+    ).toBeVisible();
+    await expect(
+      guestPage.getByRole("textbox", { name: "Message", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      guestPage.getByRole("button", { name: "Send message", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      guestPage.getByLabel("Attach a file", { exact: true }),
+    ).toBeDisabled();
+    await expect(
+      guestPage.getByText("You’re muted by the host.", { exact: true }),
+    ).toBeVisible();
+    const guestRooms = await (
+      await guestPage.request.get(
+        `${new URL(inviteUrl).origin}/api/conversations`,
+      )
+    ).json();
+    const joinedRoom = guestRooms.find(
+      (r: any) => r.title === "Browser test coffee room",
+    );
+    const blockedWrite = await guestPage.request.post(
+      `${new URL(inviteUrl).origin}/api/rooms/${joinedRoom.id}/messages`,
+      {
+        headers: {
+          Origin: new URL(inviteUrl).origin,
+          "X-CSRF-Token": guest.csrf,
+        },
+        data: {
+          text: "Forged muted message",
+          clientMessageId: crypto.randomUUID(),
+        },
+      },
+    );
+    expect(blockedWrite.status()).toBe(403);
+    await guestPage.screenshot({
+      path: ".context/muted-member-desktop.png",
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Unmute Coffee guest", exact: true })
+      .click();
+    await expect(
+      guestPage.getByRole("textbox", { name: "Message", exact: true }),
+    ).toBeEnabled();
+    await guestPage
+      .getByRole("textbox", { name: "Message", exact: true })
+      .fill("I can chat again");
+    await guestPage
+      .getByRole("button", { name: "Send message", exact: true })
+      .click();
+    await expect(
+      page.locator(".messages").getByText("I can chat again", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Block Coffee guest", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Unblock Coffee guest", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Unblock Coffee guest", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.locator(".messages").getByText("I can chat again", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      guestPage
+        .locator(".messages")
+        .getByText("Hello from a real browser", { exact: true }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: ".context/room-sidebar-desktop.png",
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page
+      .getByRole("button", { name: "Unblock Coffee guest", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Block Coffee guest", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator(".messages").getByText("I can chat again", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      guestPage
+        .locator(".messages")
+        .getByText("Hello from a real browser", { exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Back to rooms", exact: true })
+      .click();
+    await expect(
+      page.getByRole("navigation", { name: "Main navigation", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Room members", exact: true }),
+    ).toHaveCount(0);
   } finally {
     await guestContext.close();
   }
@@ -312,7 +424,7 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   ).toHaveValue(/#room=/);
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await page
-    .getByRole("button", { name: "Room details and host controls" })
+    .getByRole("button", { name: "Show room members", exact: true })
     .click();
   await expect(
     page.getByRole("heading", { name: "Host controls" }),
@@ -323,6 +435,11 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   await expect(
     page.getByRole("button", { name: "Close room", exact: true }),
   ).toBeVisible();
+  await page.screenshot({
+    path: ".context/room-sidebar-mobile.png",
+    fullPage: true,
+    animations: "disabled",
+  });
   await page.getByRole("button", { name: "Edit room & message pace" }).click();
   await page.getByLabel("Topic", { exact: true }).fill("Updated mobile room");
   await page.getByLabel("Seconds between messages").fill("0");

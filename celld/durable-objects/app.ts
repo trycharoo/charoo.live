@@ -603,10 +603,16 @@ export class AppCoordinator extends DurableObject<Env> {
           }
           case "unblock": {
             requireThat(u, 401, "Sign in to continue");
-            await run(
-              env,
-              "DELETE FROM blocks WHERE user_id=? AND target_id=?",
-              [u.id, input.targetId],
+            await this.effect(
+              "event",
+              { type: "unblocked", userIds: [u.id, input.targetId] },
+              [
+                stmt(
+                  env,
+                  "DELETE FROM blocks WHERE user_id=? AND target_id=?",
+                  [u.id, input.targetId],
+                ),
+              ],
             );
             return null;
           }

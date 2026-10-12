@@ -218,6 +218,32 @@ describe("Durable authorities and coordination", () => {
         clientMessageId: crypto.randomUUID(),
       }),
     ).toMatchObject({ ok: false, status: 403 });
+    const muted = unwrap(await room.command(b.actor, "snapshot"));
+    expect(Date.parse(muted.mutedUntil)).toBeGreaterThan(Date.now());
+    expect(
+      muted.participants.find((p: any) => p.id === b.actor.userId).mutedUntil,
+    ).toBe(muted.mutedUntil);
+    expect(
+      await room.command(b.actor, "moderate", {
+        action: "UNMUTE",
+        targetId: b.actor.userId,
+      }),
+    ).toMatchObject({ ok: false, status: 403 });
+    unwrap(
+      await room.command(a.actor, "moderate", {
+        action: "UNMUTE",
+        targetId: b.actor.userId,
+      }),
+    );
+    expect(
+      unwrap(await room.command(b.actor, "snapshot")).mutedUntil,
+    ).toBeNull();
+    expect(
+      await room.command(b.actor, "message", {
+        text: "Unmuted",
+        clientMessageId: crypto.randomUUID(),
+      }),
+    ).toMatchObject({ ok: true });
     unwrap(
       await room.command(a.actor, "moderate", {
         action: "REMOVE",

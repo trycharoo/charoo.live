@@ -1,4 +1,5 @@
 import { Realtime } from "./realtime";
+import { RoomSidebar } from "./RoomSidebar";
 import {
   useEffect,
   useRef,
@@ -185,7 +186,6 @@ export function App() {
     [connected, setConnected] = useState(false),
     [mobileNav, setMobileNav] = useState(false),
     [createAfterGuest, setCreateAfterGuest] = useState(false),
-    [showRoomDetails, setShowRoomDetails] = useState(false),
     [pending, setPending] = useState<any[]>([]),
     [reply, setReply] = useState<Message | null>(null),
     [typing, setTyping] = useState(false),
@@ -210,7 +210,6 @@ export function App() {
     ),
     chatEnd = useRef<HTMLDivElement>(null),
     shareLinkInput = useRef<HTMLInputElement>(null),
-    roomLinkInput = useRef<HTMLInputElement>(null),
     typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
     explicitAvailable = useRef(false);
   activeRef.current = active;
@@ -229,6 +228,13 @@ export function App() {
       return null;
     } finally {
       setBusy(false);
+    }
+  };
+  const background = async (fn: () => Promise<unknown>) => {
+    try {
+      await fn();
+    } catch (e) {
+      notify((e as Error).message, true);
     }
   };
   async function me() {
@@ -284,7 +290,6 @@ export function App() {
     setDraft("");
     setReply(null);
     setTyping(false);
-    setShowRoomDetails(false);
     if (ws.current?.readyState === 1)
       ws.current.send(JSON.stringify({ type: "subscribe", roomId: id }));
     await api(`/rooms/${id}/read`, "POST", {});
@@ -460,7 +465,7 @@ export function App() {
   }, [mobileNav]);
   useEffect(() => {
     if (!user || loading) return;
-    act(async () => {
+    background(async () => {
       await heartbeat();
       await loadSocial();
       await joinShared();
@@ -473,11 +478,11 @@ export function App() {
   }, [user?.id, loading, joinProfilePending]);
   useEffect(() => {
     if (!user?.verified || page !== "tonight") return;
-    const t = setTimeout(() => act(() => loadRooms()), 250);
+    const t = setTimeout(() => background(() => loadRooms()), 250);
     return () => clearTimeout(t);
   }, [search, category, page, user?.verified]);
   useEffect(() => {
-    if (page === "admin" && user && user.role !== "USER") act(loadAdmin);
+    if (page === "admin" && user && user.role !== "USER") background(loadAdmin);
   }, [page, user?.id]);
   useEffect(() => {
     if (ws.current?.readyState === 1 && user?.verified)
@@ -497,7 +502,7 @@ export function App() {
     if (!queue) return;
     const t = setInterval(
       () =>
-        act(async () => {
+        background(async () => {
           const result = await api("/match", "POST", {});
           if (result.roomId) await openRoom(result.roomId);
         }),
@@ -515,7 +520,7 @@ export function App() {
         .then((r) => setMessages(r.messages))
         .catch(() => {});
     if (event.type === "matched")
-      act(async () => {
+      background(async () => {
         await openRoom(event.payload.roomId);
         await loadSocial();
       });
@@ -523,7 +528,7 @@ export function App() {
       ["message", "room.changed"].includes(event.type) &&
       event.roomId === activeRef.current?.id
     )
-      act(refreshChat);
+      background(refreshChat);
     if (
       event.type === "room.closed" &&
       event.roomId === activeRef.current?.id
@@ -531,7 +536,7 @@ export function App() {
       setActive(null);
       activeRef.current = null;
       notify("This room has closed.");
-      act(loadSocial);
+      background(loadSocial);
     }
     if (
       event.type === "discovery.changed" &&
@@ -539,7 +544,7 @@ export function App() {
       page === "tonight" &&
       !activeRef.current
     ) {
-      act(() => loadRooms());
+      background(() => loadRooms());
     }
     if (
       ["request", "call.request"].includes(event.type) &&
@@ -561,9 +566,10 @@ export function App() {
         "call.request",
         "call.changed",
         "blocked",
+        "unblocked",
       ].includes(event.type)
     ) {
-      act(async () => {
+      background(async () => {
         await loadSocial();
         if (activeRef.current) await refreshChat();
       });
@@ -598,7 +604,7 @@ export function App() {
           socket.send(
             JSON.stringify({ type: "subscribe", roomId: activeRef.current.id }),
           );
-        act(async () => {
+        background(async () => {
           await loadSocial();
           if (activeRef.current) await refreshChat();
         });
@@ -736,6 +742,13 @@ export function App() {
   async function submitMessage(payload: any) {
     const roomId = activeRef.current?.id;
     if (!roomId) return;
+    if (
+      activeRef.current?.mutedUntil &&
+      Date.parse(activeRef.current.mutedUntil) > Date.now()
+    )
+      throw new Error(
+        "The host muted you. You can send messages after you are unmuted.",
+      );
     await api(`/rooms/${roomId}/messages`, "POST", payload);
     setPending((prev) =>
       prev.filter((p) => p.clientMessageId !== payload.clientMessageId),
@@ -744,7 +757,7 @@ export function App() {
   }
   async function sendMessage(e: FormEvent) {
     e.preventDefault();
-    if (!draft.trim() || !active) return;
+    if (!draft.trim() || !active || isMuted) return;
     const payload = {
       clientMessageId: crypto.randomUUID(),
       text: draft.trim(),
@@ -763,6 +776,8 @@ export function App() {
     await act(async () => {
       const room = activeRef.current;
       if (!room) return;
+      if (room.mutedUntil && Date.parse(room.mutedUntil) > Date.now())
+        throw new Error("You cannot send attachments while muted.");
       const init = await api("/media/init", "POST", {
         roomId: room.id,
         name: file.name,
@@ -802,7 +817,6 @@ export function App() {
     setActive(null);
     activeRef.current = null;
     setMobileNav(false);
-    setShowRoomDetails(false);
   };
   const startSharedRoom = () => {
     if (user) setModal("shared");
@@ -825,15 +839,55 @@ export function App() {
     act(async () => {
       await api(`/rooms/${active.id}/moderate`, "POST", { action, targetId });
       if (action === "CLOSE") {
-        setActive(null);
-        activeRef.current = null;
-      } else await refreshChat();
+        choosePage(page);
+      } else {
+        await refreshChat();
+        if (action === "MUTE")
+          notify(
+            "Member muted for 30 minutes. Click Unmute to let them chat again.",
+          );
+        if (action === "UNMUTE")
+          notify("Member unmuted. They can send messages again.");
+        if (action === "REMOVE") notify("Member removed from this room.");
+      }
+    });
+  const toggleBlock = (targetId: string) =>
+    act(async () => {
+      const blocked = blocks.some((b) => b.id === targetId);
+      if (blocked) await api(`/blocks/${targetId}`, "DELETE");
+      else await api("/blocks", "POST", { targetId });
+      await loadSocial();
+      notify(
+        blocked
+          ? "Member unblocked. Their messages are visible again."
+          : "Member blocked. Their messages are hidden from you.",
+      );
+      await refreshChat();
     });
   const isOwner =
     active?.creator_id === user?.id &&
     ["AVAILABLE_TONIGHT", "SHARED_GROUP"].includes(active?.type);
   const peers =
     active?.participants?.filter((p: any) => p.id !== user?.id) || [];
+  const isMuted = Boolean(
+    active?.mutedUntil && Date.parse(active.mutedUntil) > Date.now(),
+  );
+  useEffect(() => {
+    if (!active) return;
+    const deadlines = [
+      active.mutedUntil,
+      ...active.participants.map((p: any) => p.mutedUntil),
+    ]
+      .filter(Boolean)
+      .map((until: string) => Date.parse(until) - Date.now())
+      .filter((delay: number) => delay > 0);
+    if (!deadlines.length) return;
+    const timer = setTimeout(
+      () => background(refreshChat),
+      Math.min(...deadlines) + 50,
+    );
+    return () => clearTimeout(timer);
+  }, [active?.id, active?.mutedUntil, active?.participants]);
   if (loading)
     return (
       <div className="loading">
@@ -852,101 +906,130 @@ export function App() {
       )}
       <aside
         id="primary-sidebar"
-        className={`sidebar ${mobileNav ? "visible" : ""}`}
+        className={`sidebar ${active ? "room-sidebar" : ""} ${mobileNav ? "visible" : ""}`}
+        aria-label={active ? "Room sidebar" : "Main sidebar"}
       >
-        <a className="brand" href="/" aria-label="Charoo home">
-          <span>
-            <Sparkles size={23} />
-          </span>
-          charoo<span className="brand-dot">.</span>
-        </a>
-        <div className="sidebar-caption">A LINK. A ROOM. YOUR PEOPLE.</div>
-        <nav aria-label="Main navigation">
-          {nav.map(([p, label, icon]) => (
-            <button
-              key={p}
-              className={page === p && !active ? "selected" : ""}
-              aria-current={page === p && !active ? "page" : undefined}
-              onClick={() => choosePage(p)}
-            >
-              {icon}
-              <span>{label}</span>
-              {p === "contacts" && requests.length > 0 && (
-                <b className="count">{requests.length}</b>
+        {active ? (
+          <RoomSidebar
+            room={active}
+            user={user}
+            isOwner={isOwner}
+            busy={busy}
+            blocks={blocks}
+            onBack={() => choosePage(page)}
+            onClose={() => setMobileNav(false)}
+            onInvite={openInvite}
+            onCopyInvite={copyInvite}
+            onRequest={request}
+            onModerate={moderation}
+            onToggleBlock={toggleBlock}
+            onVideoInvite={(targetId) =>
+              act(async () => {
+                await api("/calls", "POST", { roomId: active.id, targetId });
+                notify("Video call invitation sent.");
+                await loadSocial();
+              })
+            }
+            onEditRoom={() => setModal("editRoom")}
+            onReportRoom={() => setModal("report")}
+          />
+        ) : (
+          <>
+            <a className="brand" href="/" aria-label="Charoo home">
+              <span>
+                <Sparkles size={23} />
+              </span>
+              charoo<span className="brand-dot">.</span>
+            </a>
+            <div className="sidebar-caption">A LINK. A ROOM. YOUR PEOPLE.</div>
+            <nav aria-label="Main navigation">
+              {nav.map(([p, label, icon]) => (
+                <button
+                  key={p}
+                  className={page === p && !active ? "selected" : ""}
+                  aria-current={page === p && !active ? "page" : undefined}
+                  onClick={() => choosePage(p)}
+                >
+                  {icon}
+                  <span>{label}</span>
+                  {p === "contacts" && requests.length > 0 && (
+                    <b className="count">{requests.length}</b>
+                  )}
+                </button>
+              ))}
+            </nav>
+            <div className="sidebar-rooms">
+              <div className="eyebrow">ACTIVE CONVERSATIONS</div>
+              {conversations.slice(0, 7).map((r) => (
+                <button
+                  key={r.id}
+                  className={active?.id === r.id ? "selected" : ""}
+                  onClick={() => act(() => openRoom(r.id))}
+                >
+                  <MessageCircle size={16} />
+                  <span>{r.title}</span>
+                </button>
+              ))}
+              {!conversations.length && (
+                <p>Your next group chat is just a link away.</p>
               )}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-rooms">
-          <div className="eyebrow">ACTIVE CONVERSATIONS</div>
-          {conversations.slice(0, 7).map((r) => (
-            <button
-              key={r.id}
-              className={active?.id === r.id ? "selected" : ""}
-              onClick={() => act(() => openRoom(r.id))}
-            >
-              <MessageCircle size={16} />
-              <span>{r.title}</span>
-            </button>
-          ))}
-          {!conversations.length && (
-            <p>Your next group chat is just a link away.</p>
-          )}
-        </div>
-        <div className="sidebar-bottom">
-          <div className="safety">
-            <Shield size={17} />
-            <span>
-              Here for the moment
-              <br />
-              <small>Temporary rooms. Real conversations.</small>
-            </span>
-          </div>
-          {install && (
-            <button onClick={() => install.prompt()}>
-              <Download size={16} />
-              Install Charoo
-            </button>
-          )}
-          {user ? (
-            <>
-              <button
-                className="user-mini"
-                onClick={() => choosePage("profile")}
-              >
-                <span className="avatar">{user.displayName[0]}</span>
+            </div>
+            <div className="sidebar-bottom">
+              <div className="safety">
+                <Shield size={17} />
                 <span>
-                  {user.displayName}
-                  <small>
-                    {user.verified
-                      ? "Verified member"
-                      : "Guest · temporary identity"}
-                  </small>
+                  Here for the moment
+                  <br />
+                  <small>Temporary rooms. Real conversations.</small>
                 </span>
-              </button>
-              <button
-                className="quiet"
-                onClick={() =>
-                  act(async () => {
-                    await api("/auth/logout", "POST", {});
-                    setUser(null);
-                    setCsrf("");
-                    setActive(null);
-                    setConversations([]);
-                    setPending([]);
-                  })
-                }
-              >
-                <LogOut size={15} />
-                Sign out
-              </button>
-            </>
-          ) : (
-            <button onClick={() => setModal("guest")}>
-              Join the conversation <ArrowRight size={16} />
-            </button>
-          )}
-        </div>
+              </div>
+              {install && (
+                <button onClick={() => install.prompt()}>
+                  <Download size={16} />
+                  Install Charoo
+                </button>
+              )}
+              {user ? (
+                <>
+                  <button
+                    className="user-mini"
+                    onClick={() => choosePage("profile")}
+                  >
+                    <span className="avatar">{user.displayName[0]}</span>
+                    <span>
+                      {user.displayName}
+                      <small>
+                        {user.verified
+                          ? "Verified member"
+                          : "Guest · temporary identity"}
+                      </small>
+                    </span>
+                  </button>
+                  <button
+                    className="quiet"
+                    onClick={() =>
+                      act(async () => {
+                        await api("/auth/logout", "POST", {});
+                        setUser(null);
+                        setCsrf("");
+                        setActive(null);
+                        setConversations([]);
+                        setPending([]);
+                      })
+                    }
+                  >
+                    <LogOut size={15} />
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setModal("guest")}>
+                  Join the conversation <ArrowRight size={16} />
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </aside>
       <main>
         <header className="topbar">
@@ -954,11 +1037,12 @@ export function App() {
             <button
               className="icon-button"
               onClick={() => setMobileNav(!mobileNav)}
-              aria-label="Toggle menu"
+              aria-label={active ? "Show room members" : "Toggle menu"}
               aria-expanded={mobileNav}
               aria-controls="primary-sidebar"
             >
               <Menu size={21} />
+              <span>{active ? "Members" : "Menu"}</span>
             </button>
             <a className="mobile-brand" href="/" aria-label="Charoo home">
               charoo<span>.</span>
@@ -1634,21 +1718,11 @@ export function App() {
           <section className="chat">
             <div className="chat-head">
               <button
-                className="icon-button"
-                aria-label="Back"
-                onClick={() => {
-                  if (ws.current?.readyState === 1)
-                    ws.current.send(
-                      JSON.stringify({
-                        type: "unsubscribe",
-                        roomId: active.id,
-                      }),
-                    );
-                  setActive(null);
-                  activeRef.current = null;
-                }}
+                className="button secondary small chat-back-button"
+                aria-label="Back to rooms"
+                onClick={() => choosePage(page)}
               >
-                <ChevronLeft />
+                <ChevronLeft size={18} /> Back
               </button>
               <div>
                 <h2>
@@ -1667,44 +1741,29 @@ export function App() {
               </div>
               {isOwner && active.type === "SHARED_GROUP" && (
                 <button
-                  className="icon-button room-invite-button"
+                  className="button secondary small room-invite-button"
                   aria-label="Invite people to room"
                   title="Invite people to room"
                   disabled={busy}
                   onClick={openInvite}
                 >
                   <Link size={18} />
-                  <span>Invite</span>
+                  <span>Invite people</span>
                 </button>
               )}
               <button
-                className="icon-button room-details-toggle"
-                aria-label="Room details and host controls"
-                aria-expanded={showRoomDetails}
-                aria-controls="room-details"
-                onClick={() => setShowRoomDetails(!showRoomDetails)}
-              >
-                <Users size={18} />
-              </button>
-              <button
-                className="icon-button"
-                aria-label="Report room"
-                onClick={() => setModal("report")}
-              >
-                <Flag size={18} />
-              </button>
-              <button
-                className="text-button"
+                className="button secondary small room-leave-button"
                 onClick={() =>
                   act(async () => {
                     await api(`/rooms/${active.id}/leave`, "POST", {});
                     setActive(null);
                     activeRef.current = null;
+                    setMobileNav(false);
                     await loadSocial();
                   })
                 }
               >
-                Leave
+                Leave room
               </button>
             </div>
             <div className="chat-layout">
@@ -1781,8 +1840,11 @@ export function App() {
                         {m.senderId === user?.id && (
                           <small>{m.readBy?.length ? "Seen" : "Sent"}</small>
                         )}
-                        <button onClick={() => setReply(m)}>Reply</button>
+                        <button disabled={isMuted} onClick={() => setReply(m)}>
+                          Reply
+                        </button>
                         <button
+                          disabled={isMuted}
                           onClick={() =>
                             act(async () => {
                               await api(
@@ -1823,6 +1885,7 @@ export function App() {
                         <div className="message-bubble">{p.text}</div>
                         <button
                           className="text-button"
+                          disabled={isMuted}
                           onClick={() => act(() => submitMessage(p))}
                         >
                           Not confirmed · retry
@@ -1833,6 +1896,27 @@ export function App() {
                   <div ref={chatEnd} />
                 </div>
                 <form className="composer" onSubmit={sendMessage}>
+                  {isMuted && (
+                    <div
+                      className="mute-notice"
+                      id="room-mute-notice"
+                      role="status"
+                    >
+                      <Shield size={18} />
+                      <div>
+                        <strong>You’re muted by the host.</strong>
+                        <span>
+                          You can read the chat. You can send messages once the
+                          host unmutes you or after{" "}
+                          {new Date(active.mutedUntil).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          .
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {reply && (
                     <div className="reply-bar">
                       Replying to: {reply.text.slice(0, 80)}
@@ -1848,11 +1932,17 @@ export function App() {
                   <div className="composer-row">
                     <label
                       className="icon-button attachment"
-                      title="Upload scanned media"
+                      title={
+                        isMuted
+                          ? "Attachments are disabled while muted"
+                          : "Attach a file"
+                      }
                     >
                       <Paperclip size={20} />
                       <input
                         type="file"
+                        aria-label="Attach a file"
+                        disabled={isMuted}
                         accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,audio/webm,audio/mpeg,application/pdf"
                         capture="environment"
                         onChange={(e) => {
@@ -1863,7 +1953,15 @@ export function App() {
                     </label>
                     <input
                       aria-label="Message"
-                      placeholder="A hello is a good place to start…"
+                      placeholder={
+                        isMuted
+                          ? "You are muted by the host"
+                          : "Type a message…"
+                      }
+                      disabled={isMuted}
+                      aria-describedby={
+                        isMuted ? "room-mute-notice" : undefined
+                      }
                       maxLength={4000}
                       value={draft}
                       onChange={(e) => {
@@ -1880,15 +1978,21 @@ export function App() {
                     <button
                       className="send"
                       aria-label="Send message"
-                      disabled={!draft.trim()}
+                      disabled={isMuted || !draft.trim()}
                     >
                       <Send size={19} />
+                      <span>Send</span>
                     </button>
                   </div>
                   <div className="composer-note">
-                    <span>Ephemeral by design. Encrypted at rest.</span>
+                    <span>
+                      {isMuted
+                        ? "You can still read the conversation."
+                        : "Press Enter to send."}
+                    </span>
                     <button
                       type="button"
+                      disabled={isMuted}
                       onClick={() =>
                         act(async () => {
                           const r = await api("/assistant", "POST", {
@@ -1905,166 +2009,6 @@ export function App() {
                   </div>
                 </form>
               </div>
-              <aside
-                id="room-details"
-                className={`participants ${showRoomDetails ? "visible" : ""}`}
-              >
-                {isOwner && active.type === "SHARED_GROUP" && (
-                  <section
-                    className="room-invite-panel"
-                    aria-label="Room invitation"
-                  >
-                    <h3>
-                      <Link size={15} /> Invite people
-                    </h3>
-                    <p>
-                      {active.verified_only
-                        ? "People with this link need to sign in before joining."
-                        : "Anyone with this link can join your room."}
-                    </p>
-                    {active.shareUrl ? (
-                      <div className="invite-link-field">
-                        <input
-                          ref={roomLinkInput}
-                          readOnly
-                          value={active.shareUrl}
-                          aria-label="Room invite link"
-                          onFocus={(e) => e.currentTarget.select()}
-                        />
-                        <button
-                          className="icon-button"
-                          aria-label="Copy room invite link"
-                          title="Copy room invite link"
-                          onClick={() =>
-                            copyInvite(active.shareUrl, roomLinkInput.current)
-                          }
-                        >
-                          <Copy size={17} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        className="button small"
-                        disabled={busy}
-                        onClick={openInvite}
-                      >
-                        Get invite link <Link size={15} />
-                      </button>
-                    )}
-                  </section>
-                )}
-                <div className="participant-heading">
-                  <span className="eyebrow">PEOPLE IN THIS ROOM</span>
-                  <button
-                    className="icon-button room-details-toggle"
-                    aria-label="Close room details"
-                    onClick={() => setShowRoomDetails(false)}
-                  >
-                    <X size={18} />
-                  </button>
-                </div>
-                {active.participants.map((p: any) => (
-                  <div className="participant" key={p.id}>
-                    <div>
-                      <span className="avatar">{p.name[0]}</span>
-                      <strong>
-                        {p.id === user?.id ? "You" : p.name}
-                        {p.verified && <Check size={13} />}
-                      </strong>
-                    </div>
-                    {p.id === active.creator_id && (
-                      <span className="host-badge">
-                        <Shield size={11} /> Host · moderator
-                      </span>
-                    )}
-                    {p.asl?.region && <p>{p.asl.region}</p>}
-                    {p.id !== user?.id && (
-                      <div className="participant-actions">
-                        {user?.verified && p.verified && (
-                          <>
-                            <button onClick={() => request(p.id, "PRIVATE")}>
-                              Private chat request
-                            </button>
-                            <button onClick={() => request(p.id, "CONTACT")}>
-                              Save contact request
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() =>
-                            act(async () => {
-                              await api("/blocks", "POST", { targetId: p.id });
-                              await refreshChat();
-                              await loadSocial();
-                            })
-                          }
-                        >
-                          Block
-                        </button>
-                        {isOwner && (
-                          <>
-                            <button onClick={() => moderation("MUTE", p.id)}>
-                              Mute for 30 min
-                            </button>
-                            <button onClick={() => moderation("REMOVE", p.id)}>
-                              Remove
-                            </button>
-                          </>
-                        )}
-                        {["PRIVATE", "CONTACT", "STRANGER"].includes(
-                          active.type,
-                        ) && (
-                          <button
-                            onClick={() =>
-                              act(async () => {
-                                await api("/calls", "POST", {
-                                  roomId: active.id,
-                                  targetId: p.id,
-                                });
-                                notify("Call invitation sent.");
-                                await loadSocial();
-                              })
-                            }
-                          >
-                            <Video size={13} />
-                            Invite to video
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {active.participants.length >= 100 && (
-                  <p className="muted">Showing the first 100 members.</p>
-                )}
-                {isOwner && (
-                  <div className="owner-controls">
-                    <h3>Host controls</h3>
-                    <p className="form-note">
-                      You’re the moderator of this room.
-                    </p>
-                    <button
-                      className="text-button"
-                      onClick={() => setModal("editRoom")}
-                    >
-                      Edit room & message pace
-                    </button>
-                    <button
-                      className="danger"
-                      onClick={() => moderation("CLOSE")}
-                    >
-                      Close room
-                    </button>
-                  </div>
-                )}
-                <div className="privacy-note">
-                  <Shield size={18} />
-                  <p>
-                    The host moderates this room. You can leave, block or report
-                    whenever you need to.
-                  </p>
-                </div>
-              </aside>
             </div>
           </section>
         )}

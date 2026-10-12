@@ -520,6 +520,11 @@ export class Room extends DurableObject<Env> {
         }
         case "moderate": {
           requireThat(
+            ["CLOSE", "REMOVE", "MUTE", "UNMUTE"].includes(input.action),
+            400,
+            "Invalid moderation action",
+          );
+          requireThat(
             room.creator_id === u.id &&
               ["AVAILABLE_TONIGHT", "SHARED_GROUP"].includes(room.type),
             403,
@@ -541,7 +546,9 @@ export class Room extends DurableObject<Env> {
                 "Participant unavailable",
               );
               if (input.action === "REMOVE") p.state = "REMOVED";
-              else p.muted_until = iso(Date.now() + 1800000);
+              else
+                p.muted_until =
+                  input.action === "UNMUTE" ? null : iso(Date.now() + 1800000);
               this.saveParticipant(p);
               this.changed();
               this.event("room.changed");
@@ -863,6 +870,11 @@ export class Room extends DurableObject<Env> {
         id: u.id,
         name: r.type === "STRANGER" ? "Stranger" : u.display_name,
         verified: !!u.verified,
+        online: p.presence_until > Date.now(),
+        mutedUntil:
+          p.muted_until && Date.parse(p.muted_until) > Date.now()
+            ? p.muted_until
+            : null,
         asl:
           (r.type !== "STRANGER" || r.asl_revealed) && visible
             ? {
@@ -874,6 +886,7 @@ export class Room extends DurableObject<Env> {
       });
     }
     await this.permit(actor);
+    const self = this.participant(actor.userId)!;
     const { invite, purged, ...safe } = this.meta();
     return {
       ...safe,
@@ -884,6 +897,10 @@ export class Room extends DurableObject<Env> {
       online: this.people().filter(
         (p) => p.state === "JOINED" && p.presence_until > Date.now(),
       ).length,
+      mutedUntil:
+        self.muted_until && Date.parse(self.muted_until) > Date.now()
+          ? self.muted_until
+          : null,
       participants: profiles,
       aslProgress: people.map((p) => ({
         id: p.user_id,

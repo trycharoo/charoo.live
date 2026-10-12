@@ -201,7 +201,7 @@ export function roomRoutes(app: Hono<HttpEnv>) {
     "/api/rooms/:roomId/moderate",
     body(
       z.object({
-        action: z.enum(["CLOSE", "REMOVE", "MUTE"]),
+        action: z.enum(["CLOSE", "REMOVE", "MUTE", "UNMUTE"]),
         targetId: z
           .string()
           .uuid()
