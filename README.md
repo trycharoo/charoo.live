@@ -26,6 +26,8 @@ Room invitation links open the join dialog automatically. Recipients can continu
 
 Inside a room, the left sidebar shows members, invitation tools, and host controls. Back restores the main navigation; on mobile, the Members button opens the same sidebar. Hosts can mute members for 30 minutes or unmute them immediately. Muted members can read but cannot send messages, reactions, or attachments. Block/Unblock hides or restores a person's messages for the user who clicks it and stops private interactions.
 
+Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's dark Lavender theme.
+
 The development wrapper excludes test artifacts, `.context`, docs and Vite source files from Celld’s native watcher; backend/config/build changes still rebuild the Worker. Vite owns frontend source updates.
 
 Celld preserves its local state in `.celld/dev`. Development initializes the same SQL migrations used in production and records them in `d1_migrations`. Existing demo Room storage remains isolated: application rooms use `charoo:<uuid>` and SQLite tables beginning with `charoo_`.

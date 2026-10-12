@@ -1,5 +1,7 @@
 import { Realtime } from "./realtime";
 import { RoomSidebar } from "./RoomSidebar";
+import { ThemeSettings } from "./ThemeSettings";
+import { useTheme } from "./useTheme";
 import {
   useEffect,
   useRef,
@@ -36,6 +38,7 @@ import {
   Download,
   Globe,
   Radio,
+  Palette,
 } from "lucide-react";
 import {
   categories,
@@ -68,10 +71,12 @@ function Modal({
   title,
   children,
   onClose,
+  className,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  className?: string;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -79,7 +84,12 @@ function Modal({
     return () => ref.current?.close();
   }, []);
   return (
-    <dialog ref={ref} onCancel={onClose}>
+    <dialog
+      ref={ref}
+      onCancel={onClose}
+      className={className}
+      aria-label={title}
+    >
       <div className="modal-head">
         <h2>{title}</h2>
         <button className="icon-button" onClick={onClose} aria-label="Close">
@@ -155,6 +165,13 @@ function JoinProfileFields({ profile }: { profile?: Profile }) {
   );
 }
 export function App() {
+  const {
+    preferences: themePreferences,
+    update: updateTheme,
+    theme,
+    saved: themeSaved,
+  } = useTheme();
+  const [themeOpen, setThemeOpen] = useState(false);
   const bootstrapped = useRef(false);
   const [user, setUser] = useState<User | null>(null),
     [loading, setLoading] = useState(true),
@@ -979,6 +996,15 @@ export function App() {
               )}
             </div>
             <div className="sidebar-bottom">
+              <button
+                onClick={() => {
+                  setThemeOpen(true);
+                  setMobileNav(false);
+                }}
+              >
+                <Palette size={17} /> Appearance
+                <span className="theme-current-swatch" aria-hidden="true" />
+              </button>
               <div className="safety">
                 <Shield size={17} />
                 <span>
@@ -1056,6 +1082,15 @@ export function App() {
             LESS SETUP, MORE CONVERSATION <span>✦</span>
           </div>
           <div className="header-actions">
+            <button
+              className="theme-trigger"
+              aria-label="Customize theme"
+              title="Customize theme"
+              onClick={() => setThemeOpen(true)}
+            >
+              <Palette size={18} /> <span>Appearance</span>
+              <i className="theme-current-swatch" aria-hidden="true" />
+            </button>
             {user && (
               <>
                 <span className={`connection ${connected ? "on" : ""}`}>
@@ -2306,6 +2341,22 @@ export function App() {
             </button>
           )}
         </div>
+      )}
+      {themeOpen && (
+        <Modal
+          title="Make it yours"
+          className="theme-dialog"
+          onClose={() => setThemeOpen(false)}
+        >
+          <ThemeSettings
+            preferences={themePreferences}
+            mode={theme.mode}
+            colors={theme.colors}
+            onChange={updateTheme}
+            onDone={() => setThemeOpen(false)}
+            saved={themeSaved}
+          />
+        </Modal>
       )}
       {callId && (
         <Modal
