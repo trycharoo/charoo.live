@@ -59,6 +59,8 @@ Use `pnpm run deploy` explicitly: pnpm also has its own unrelated `deploy` subco
 
 `celld/env.ts` declares the current application environment. `WEB_ORIGIN` and `MESSAGE_KEY` are required; `NODE_ENV` selects development or production behavior. Preserve `MESSAGE_KEY` while keeping the same Celld data: existing encrypted messages and room invitations depend on it. Local and production stores do not need a shared key just because the original app used a shared Supabase database.
 
+`ADMIN_NO_AUTH=true` enables admin tools without a staff session in development only. Keep the API on a trusted network; this mode bypasses browser origin checks for admin endpoints, while signed-in sessions still require CSRF tokens. Production always requires staff authentication.
+
 The templates leave optional provider groups commented out. Uncomment and fill a complete group when enabling Google, Resend, scanning, video or AI. These integrations still use their credentials in the Celld implementation.
 
 When carrying an environment file over from the original application, remove the obsolete application settings:
