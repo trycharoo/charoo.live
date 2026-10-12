@@ -39,6 +39,46 @@ export interface RoomRecord {
   version: number;
 }
 export const iso = (at = Date.now()) => new Date(at).toISOString();
+// Local no-auth mode (ADMIN_NO_AUTH=true): requests to /api/admin/* run as
+// this synthetic admin. For trusted networks / Zero Trust only — never enable
+// in production.
+export const LOCAL_ADMIN_ID = "00000000-0000-0000-0000-000000000000";
+const LOCAL_ADMIN_SESSION = "no-auth";
+export function localAdminEnabled(
+  env: Pick<Env, "ADMIN_NO_AUTH" | "NODE_ENV">,
+) {
+  return env.NODE_ENV !== "production" && env.ADMIN_NO_AUTH === "true";
+}
+export function isLocalAdmin(actor: Actor) {
+  return (
+    actor.userId === LOCAL_ADMIN_ID && actor.sessionHash === LOCAL_ADMIN_SESSION
+  );
+}
+export function localAdminAccount(): Account {
+  return {
+    id: LOCAL_ADMIN_ID,
+    email: null,
+    verified: true,
+    display_name: "Local admin",
+    profile: {
+      displayName: "Local admin",
+      age: null,
+      gender: "",
+      region: "",
+      bio: "",
+      interests: [],
+      aslVisibility: "private",
+    },
+    role: "ADMIN",
+    banned: false,
+    suspended_until: null,
+    created_at: iso(),
+    guest_expires_at: null,
+  };
+}
+export function localAdminActor(): Actor {
+  return { userId: LOCAL_ADMIN_ID, sessionHash: LOCAL_ADMIN_SESSION };
+}
 export const roomStub = (env: Env, id: string) =>
   env.ROOM.getByName(`charoo:${id}`);
 export const coordinator = (env: Env) => env.APP.getByName("charoo");
@@ -100,7 +140,11 @@ export async function authenticate(env: Env, actor: Actor) {
     "SELECT * FROM sessions WHERE token_hash=? AND user_id=? AND expires_at>?",
     [actor.sessionHash, actor.userId, iso()],
   );
-  requireThat(s, 401, "Session expired");
+  if (!s) {
+    if (localAdminEnabled(env) && isLocalAdmin(actor))
+      return localAdminAccount();
+    requireThat(s, 401, "Session expired");
+  }
   return user(env, actor.userId);
 }
 export async function settings(env: Env): Promise<Settings> {

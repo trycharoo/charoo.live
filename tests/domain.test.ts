@@ -140,8 +140,16 @@ describe("Durable authorities and coordination", () => {
       );
     const room = roomStub(f.env, created.id),
       token = new URL(created.shareUrl).hash.slice(6);
-    unwrap(
+    const pending = unwrap(
       await room.command(b.actor, "join", { tokenHash: await hash(token) }),
+    );
+    expect(pending.pending).toBe(true);
+    const requests = unwrap(await room.command(a.actor, "join_requests", {}));
+    unwrap(
+      await room.command(a.actor, "join_respond", {
+        requestId: requests[0].id,
+        accept: true,
+      }),
     );
     unwrap(
       await room.command(a.actor, "message", {
@@ -198,7 +206,23 @@ describe("Durable authorities and coordination", () => {
       ),
       room = roomStub(f.env, created.id),
       tokenHash = await hash(new URL(created.shareUrl).hash.slice(6));
-    unwrap(await room.command(b.actor, "join", { tokenHash }));
+    const joinResult = unwrap(await room.command(b.actor, "join", { tokenHash }));
+    expect(joinResult.pending).toBe(true);
+    // Requester sees pending, host sees the queue.
+    expect(unwrap(await room.command(b.actor, "join_status", {}))).toMatchObject({
+      status: "PENDING",
+    });
+    const queue = unwrap(await room.command(a.actor, "join_requests", {}));
+    expect(queue).toHaveLength(1);
+    unwrap(
+      await room.command(a.actor, "join_respond", {
+        requestId: queue[0].id,
+        accept: true,
+      }),
+    );
+    expect(
+      unwrap(await room.command(b.actor, "join_status", {})),
+    ).toMatchObject({ status: "APPROVED" });
     expect(await room.command(b.actor, "invite")).toMatchObject({
       ok: false,
       status: 403,
@@ -244,12 +268,22 @@ describe("Durable authorities and coordination", () => {
         clientMessageId: crypto.randomUUID(),
       }),
     ).toMatchObject({ ok: true });
-    unwrap(
+    expect(
       await room.command(a.actor, "moderate", {
         action: "REMOVE",
         targetId: b.actor.userId,
       }),
+    ).toMatchObject({ ok: false, status: 400 });
+    unwrap(
+      await room.command(a.actor, "moderate", {
+        action: "REMOVE",
+        targetId: b.actor.userId,
+        reason: "Spamming the room",
+      }),
     );
+    expect(unwrap(await room.command(b.actor, "join_status", {}))).toMatchObject({
+      status: "REMOVED",
+    });
     expect(await room.command(b.actor, "messages")).toMatchObject({
       ok: false,
     });
@@ -257,6 +291,68 @@ describe("Durable authorities and coordination", () => {
       ok: false,
       status: 403,
     });
+  });
+  it("queues link joins for host approval, reject and cancel", async () => {
+    const f = await fixture(),
+      a = await f.guest(),
+      b = await f.guest(),
+      c = await f.guest(),
+      created = unwrap(
+        await f.app.command(a.actor, "room.create", {
+          type: "SHARED_GROUP",
+          title: "Approval room",
+        }),
+      ),
+      room = roomStub(f.env, created.id),
+      tokenHash = await hash(new URL(created.shareUrl).hash.slice(6));
+    const first = unwrap(await room.command(b.actor, "join", { tokenHash }));
+    expect(first.pending).toBe(true);
+    // Duplicate knocks return the same pending request.
+    const again = unwrap(await room.command(b.actor, "join", { tokenHash }));
+    expect(again.requestId).toBe(first.requestId);
+    const queue = unwrap(await room.command(a.actor, "join_requests", {}));
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ status: "PENDING" });
+    // Non-members cannot review the queue.
+    expect(await room.command(b.actor, "join_requests", {})).toMatchObject({
+      ok: false,
+    });
+    // Reject with a reason the requester can see.
+    unwrap(
+      await room.command(a.actor, "join_respond", {
+        requestId: queue[0].id,
+        accept: false,
+        reason: "Room is full right now",
+      }),
+    );
+    expect(
+      unwrap(await room.command(b.actor, "join_status", {})),
+    ).toMatchObject({ status: "REJECTED", reason: "Room is full right now" });
+    // Rejected visitors can knock again.
+    const retry = unwrap(await room.command(b.actor, "join", { tokenHash }));
+    expect(retry.pending).toBe(true);
+    // Requesters can cancel a pending knock.
+    unwrap(await room.command(b.actor, "join_cancel", {}));
+    expect(
+      unwrap(await room.command(b.actor, "join_status", {})),
+    ).toMatchObject({ status: "NONE" });
+    expect(
+      unwrap(await room.command(a.actor, "join_requests", {})),
+    ).toHaveLength(0);
+    // Approving lets the visitor in.
+    unwrap(await room.command(c.actor, "join", { tokenHash }));
+    const pending = unwrap(await room.command(a.actor, "join_requests", {}));
+    unwrap(
+      await room.command(a.actor, "join_respond", {
+        requestId: pending[0].id,
+        accept: true,
+      }),
+    );
+    expect(
+      unwrap(await room.command(c.actor, "snapshot", {} as any)).participants.map(
+        (p: any) => p.id,
+      ),
+    ).toContain(c.actor.userId);
   });
   it("serializes available-room limits", async () => {
     const f = await fixture(),
@@ -308,6 +404,23 @@ describe("Durable authorities and coordination", () => {
       unwrap(await roomStub(f.env, matched.roomId).command(a.actor, "leave"));
     await matcher.match(a.actor);
     expect(unwrap(await matcher.match(b.actor))).toEqual({ queued: true });
+  });
+  it("requeues quick chat instead of failing on a blocked match", async () => {
+    const f = await fixture(),
+      a = await f.guest(),
+      b = await f.guest(),
+      matcher = f.matcher.getByName("charoo");
+    await matcher.match(a.actor);
+    const match = unwrap(await matcher.match(b.actor));
+    if (!("roomId" in match)) throw new Error("Expected match");
+    unwrap(await f.app.command(a.actor, "block", { targetId: b.actor.userId }));
+    // Stale active_matches row points at a room the blocker can no longer
+    // enter. Retrying quick chat must queue fresh, not throw
+    // "Conversation unavailable".
+    expect(unwrap(await matcher.match(a.actor))).toEqual({ queued: true });
+    unwrap(
+      await f.app.command(a.actor, "unblock", { targetId: b.actor.userId }),
+    );
   });
   it("accepts duplicate contact requests into one persistent room", async () => {
     const f = await fixture(),

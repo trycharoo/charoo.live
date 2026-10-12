@@ -8,6 +8,9 @@ import {
   publicUser,
   settings,
   roomStub,
+  localAdminAccount,
+  localAdminActor,
+  localAdminEnabled,
 } from "../shared/data";
 import { HttpError, requireThat, unwrap } from "../shared/errors";
 import {
@@ -16,6 +19,7 @@ import {
   body,
   rate,
   socketRequest,
+  trustedOrigin,
   type HttpEnv,
 } from "./context";
 import { authRoutes } from "../features/auth/routes";
@@ -39,7 +43,15 @@ app.use("*", async (c, next) => {
   if (/^\/api\/media\/[^/]+\/scan\/[^/]+\/(input|output)$/.test(c.req.path))
     return next();
   const origin = c.req.header("Origin");
-  requireThat(!origin || origin === c.env.WEB_ORIGIN, 403, "Untrusted origin");
+  // Local admin tools may omit a session and browser origin. A trusted
+  // network guards access; authenticated sessions still require CSRF tokens.
+  const noAuthAdmin =
+    localAdminEnabled(c.env) && c.req.path.startsWith("/api/admin/");
+  requireThat(
+    !origin || trustedOrigin(c.env, origin) || noAuthAdmin,
+    403,
+    "Untrusted origin",
+  );
   if (origin) {
     c.header("Access-Control-Allow-Origin", origin);
     c.header("Access-Control-Allow-Credentials", "true");
@@ -51,7 +63,9 @@ app.use("*", async (c, next) => {
     return c.body(null, 204);
   }
   requireThat(
-    ["GET", "HEAD"].includes(c.req.method) || origin === c.env.WEB_ORIGIN,
+    ["GET", "HEAD"].includes(c.req.method) ||
+      trustedOrigin(c.env, origin) ||
+      noAuthAdmin,
     403,
     "Origin required",
   );
@@ -73,6 +87,12 @@ app.use("*", async (c, next) => {
   const s = await session(c);
   c.set("session", s);
   c.set("actor", s ? { userId: s.user_id, sessionHash: s.token_hash } : null);
+  if (!s && localAdminEnabled(c.env) && c.req.path.startsWith("/api/admin/")) {
+    // Local no-auth mode: Zero Trust (or the trusted network) guards access
+    // instead of a staff session. Scoped to admin endpoints only.
+    c.set("actor", localAdminActor());
+    c.set("user", localAdminAccount());
+  }
   if (!ip && s) c.set("clientKey", `user:${s.user_id}`);
   if (!["/health", "/api/health"].includes(c.req.path))
     await rate(c, "http", 180, 60, "Too many requests; try again shortly");

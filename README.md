@@ -20,11 +20,17 @@ In another terminal:
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly, including its port and without a trailing slash. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
+Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly in production, including its port and without a trailing slash. Development also accepts the matching `localhost` or `127.0.0.1` origin on the same port. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
 
 Room invitation links open the join dialog automatically. Recipients can continue as guests or sign in with Google/email, then enter the invited room using their chosen nickname. Nickname is required; age and sex are optional. New guests keep these details private by default, and returning users retain their profile visibility setting. Google and email returns preserve the invitation until the recipient confirms their profile.
 
+Use **Join a room** on the home screen or in the main navigation to paste a full invitation URL. The app validates the link and continues through the same guest/sign-in and nickname confirmation flow. Rooms that require host approval keep that requirement, and closed or expired invitations are rejected by the server.
+
+Quick chat provides **Next** in the chat header and member sidebar to leave the current conversation and find someone new. Retrying a stale blocked match queues a new conversation instead of failing.
+
 Inside a room, the left sidebar shows members, invitation tools, and host controls. Back restores the main navigation; on mobile, the Members button opens the same sidebar. Hosts can mute members for 30 minutes or unmute them immediately. Muted members can read but cannot send messages, reactions, or attachments. Block/Unblock hides or restores a person's messages for the user who clicks it and stops private interactions.
+
+Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's dark Lavender theme.
 
 The development wrapper excludes test artifacts, `.context`, docs and Vite source files from Celld’s native watcher; backend/config/build changes still rebuild the Worker. Vite owns frontend source updates.
 
@@ -52,6 +58,8 @@ Use `pnpm run deploy` explicitly: pnpm also has its own unrelated `deploy` subco
 ## Application environment
 
 `celld/env.ts` declares the current application environment. `WEB_ORIGIN` and `MESSAGE_KEY` are required; `NODE_ENV` selects development or production behavior. Preserve `MESSAGE_KEY` while keeping the same Celld data: existing encrypted messages and room invitations depend on it. Local and production stores do not need a shared key just because the original app used a shared Supabase database.
+
+`ADMIN_NO_AUTH=true` enables admin tools without a staff session in development only. Keep the API on a trusted network; this mode bypasses browser origin checks for admin endpoints, while signed-in sessions still require CSRF tokens. Production always requires staff authentication.
 
 The templates leave optional provider groups commented out. Uncomment and fill a complete group when enabling Google, Resend, scanning, video or AI. These integrations still use their credentials in the Celld implementation.
 

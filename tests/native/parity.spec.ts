@@ -50,7 +50,18 @@ test("production assets, room sockets, REST writes and unauthorized socket activ
     expect(asset.headers()["x-content-type-options"]).toBe("nosniff");
     const r = await group(a),
       token = new URL(r.shareUrl).hash.slice(6);
-    expect((await b.api("/shared/join", "POST", { token })).status()).toBe(200);
+    const joinRes = await b.api("/shared/join", "POST", { token });
+    expect(joinRes.status()).toBe(200);
+    expect(await joinRes.json()).toMatchObject({ pending: true });
+    // Shared-room link joins wait for host approval.
+    const queue = await (await a.api(`/rooms/${r.id}/join-requests`)).json();
+    expect(
+      (
+        await a.api(`/rooms/${r.id}/join-requests/${queue[0].id}/respond`, "POST", {
+          accept: true,
+        })
+      ).status(),
+    ).toBe(200);
     const page = await a.context.newPage();
     const socketFrames: string[] = [];
     page.on("websocket", (ws) =>
@@ -205,9 +216,31 @@ test("email sign-in returns to the invited room in the browser", async ({
       .getByLabel("Nickname", { exact: true })
       .fill("Email room friend");
     await page.getByRole("button", { name: "Join room", exact: true }).click();
+    await expect(page.getByText(/is pending/)).toBeVisible();
+    // Shared-room link joins wait for host approval; the guest page picks
+    // up the approval through its join-status polling.
+    let queue: any[] = [];
+    await expect
+      .poll(
+        async () =>
+          (queue = await (
+            await host.api(`/rooms/${room.id}/join-requests`)
+          ).json()).length,
+        { timeout: 10000 },
+      )
+      .toBe(1);
+    expect(
+      (
+        await host.api(
+          `/rooms/${room.id}/join-requests/${queue[0].id}/respond`,
+          "POST",
+          { accept: true },
+        )
+      ).status(),
+    ).toBe(200);
     await expect(
       page.getByRole("heading", { name: "Email invitation room", exact: true }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 15000 });
     await expect(page.locator(".messages")).toBeVisible();
     await expect.poll(() => new URL(page.url()).hash).toBe("");
     const me = await (await guest.context.request.get(`${base}/api/me`)).json();

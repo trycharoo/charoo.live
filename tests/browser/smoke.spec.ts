@@ -269,6 +269,12 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
     await guestPage.getByRole("checkbox").check();
     await guestPage.getByRole("button", { name: "Continue as guest" }).click();
     await expect(
+      guestPage.getByText(/Request to join.*is pending/),
+    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Join requests/ })).toBeVisible();
+    await expect(page.getByText("Coffee guest")).toBeVisible();
+    await page.getByRole("button", { name: "Accept", exact: true }).click();
+    await expect(
       guestPage.getByRole("heading", {
         name: "Browser test coffee room",
         exact: true,
