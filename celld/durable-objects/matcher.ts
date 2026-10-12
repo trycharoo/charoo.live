@@ -71,8 +71,17 @@ export class Matcher extends DurableObject<Env> {
             "SELECT state FROM room_index WHERE id=?",
             [active.room_id],
           );
-          if (!index || index.state === "OPEN") unwrap(recovered);
-          await run(env, "DELETE FROM active_matches WHERE user_id=?", [u.id]);
+          if (!index || index.state === "OPEN") {
+            if (recovered.status === 403) {
+              // Stale pointer at a room the user can no longer enter
+              // (blocked peer, removed, suspended). Drop it and queue fresh
+              // instead of surfacing "Conversation unavailable".
+              await run(env, "DELETE FROM active_matches WHERE user_id=?", [
+                u.id,
+              ]);
+            } else unwrap(recovered);
+          } else
+            await run(env, "DELETE FROM active_matches WHERE user_id=?", [u.id]);
         }
         this.ctx.storage.sql.exec(
           "INSERT INTO charoo_waiting(user_id,queued_at,until) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET until=excluded.until",

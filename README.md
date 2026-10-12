@@ -26,6 +26,8 @@ Room invitation links open the join dialog automatically. Recipients can continu
 
 Use **Join a room** on the home screen or in the main navigation to paste a full invitation URL. The app validates the link and continues through the same guest/sign-in and nickname confirmation flow. Rooms that require host approval keep that requirement, and closed or expired invitations are rejected by the server.
 
+Quick chat provides **Next** in the chat header and member sidebar to leave the current conversation and find someone new. Retrying a stale blocked match queues a new conversation instead of failing.
+
 Inside a room, the left sidebar shows members, invitation tools, and host controls. Back restores the main navigation; on mobile, the Members button opens the same sidebar. Hosts can mute members for 30 minutes or unmute them immediately. Muted members can read but cannot send messages, reactions, or attachments. Block/Unblock hides or restores a person's messages for the user who clicks it and stops private interactions.
 
 Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's dark Lavender theme.

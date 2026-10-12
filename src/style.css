@@ -1316,6 +1316,12 @@ dialog label {
   font-size: 12px;
   margin: 0;
 }
+.stranger-next {
+  width: 100%;
+  justify-content: center;
+  margin-top: 14px;
+  min-height: 44px;
+}
 .room-sidebar .room-invite-panel {
   padding-bottom: 15px;
   margin-bottom: 22px;

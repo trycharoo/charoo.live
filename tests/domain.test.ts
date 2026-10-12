@@ -405,6 +405,23 @@ describe("Durable authorities and coordination", () => {
     await matcher.match(a.actor);
     expect(unwrap(await matcher.match(b.actor))).toEqual({ queued: true });
   });
+  it("requeues quick chat instead of failing on a blocked match", async () => {
+    const f = await fixture(),
+      a = await f.guest(),
+      b = await f.guest(),
+      matcher = f.matcher.getByName("charoo");
+    await matcher.match(a.actor);
+    const match = unwrap(await matcher.match(b.actor));
+    if (!("roomId" in match)) throw new Error("Expected match");
+    unwrap(await f.app.command(a.actor, "block", { targetId: b.actor.userId }));
+    // Stale active_matches row points at a room the blocker can no longer
+    // enter. Retrying quick chat must queue fresh, not throw
+    // "Conversation unavailable".
+    expect(unwrap(await matcher.match(a.actor))).toEqual({ queued: true });
+    unwrap(
+      await f.app.command(a.actor, "unblock", { targetId: b.actor.userId }),
+    );
+  });
   it("accepts duplicate contact requests into one persistent room", async () => {
     const f = await fixture(),
       a = await f.guest(true),

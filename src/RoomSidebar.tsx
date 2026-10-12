@@ -7,6 +7,7 @@ import {
   Flag,
   Link,
   Shield,
+  Shuffle,
   UserCheck,
   UserX,
   Video,
@@ -47,6 +48,7 @@ export function RoomSidebar({
   onRequest,
   onModerate,
   onToggleBlock,
+  onNext,
   onVideoInvite,
   onEditRoom,
   onReportRoom,
@@ -70,6 +72,7 @@ export function RoomSidebar({
   onRequest: (id: string, kind: string) => void;
   onModerate: (action: string, id?: string, reason?: string) => void;
   onToggleBlock: (id: string) => void;
+  onNext?: () => void;
   onVideoInvite: (id: string) => void;
   onEditRoom: () => void;
   onReportRoom: () => void;
@@ -103,6 +106,15 @@ export function RoomSidebar({
         <p>
           {room.participants.length} members · {room.online} online
         </p>
+        {room.type === "STRANGER" && (
+          <button
+            className="button small stranger-next"
+            disabled={busy}
+            onClick={() => onNext?.()}
+          >
+            <Shuffle size={16} /> Next
+          </button>
+        )}
       </div>
       {isOwner && room.type === "SHARED_GROUP" && (
         <section className="room-invite-panel" aria-label="Room invitation">
@@ -283,34 +295,42 @@ export function RoomSidebar({
               )}
               {member.id !== user?.id && (
                 <>
-                  <div className="participant-actions">
-                    {isOwner && (
-                      <button
-                        className={
-                          muted ? "member-action active" : "member-action"
-                        }
-                        disabled={busy}
-                        aria-label={`${muted ? "Unmute" : "Mute"} ${member.name}`}
-                        onClick={() =>
-                          onModerate(muted ? "UNMUTE" : "MUTE", member.id)
-                        }
-                      >
-                        {muted ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                        {muted ? "Unmute" : "Mute for 30 min"}
-                      </button>
-                    )}
-                    <button
-                      className={
-                        blocked ? "member-action active" : "member-action"
-                      }
-                      disabled={busy}
-                      aria-label={`${blocked ? "Unblock" : "Block"} ${member.name}`}
-                      onClick={() => onToggleBlock(member.id)}
-                    >
-                      {blocked ? <UserCheck size={16} /> : <UserX size={16} />}
-                      {blocked ? "Unblock" : "Block"}
-                    </button>
-                  </div>
+                  {(isOwner || room.type !== "STRANGER") && (
+                    <div className="participant-actions">
+                      {isOwner && (
+                        <button
+                          className={
+                            muted ? "member-action active" : "member-action"
+                          }
+                          disabled={busy}
+                          aria-label={`${muted ? "Unmute" : "Mute"} ${member.name}`}
+                          onClick={() =>
+                            onModerate(muted ? "UNMUTE" : "MUTE", member.id)
+                          }
+                        >
+                          {muted ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                          {muted ? "Unmute" : "Mute for 30 min"}
+                        </button>
+                      )}
+                      {room.type !== "STRANGER" && (
+                        <button
+                          className={
+                            blocked ? "member-action active" : "member-action"
+                          }
+                          disabled={busy}
+                          aria-label={`${blocked ? "Unblock" : "Block"} ${member.name}`}
+                          onClick={() => onToggleBlock(member.id)}
+                        >
+                          {blocked ? (
+                            <UserCheck size={16} />
+                          ) : (
+                            <UserX size={16} />
+                          )}
+                          {blocked ? "Unblock" : "Block"}
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {muted && isOwner && (
                     <p className="member-help">
                       Cannot send messages until you unmute them or 30 minutes

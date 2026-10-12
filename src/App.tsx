@@ -1104,6 +1104,31 @@ export function App() {
       );
       await refreshChat();
     });
+  const nextStranger = () =>
+    act(async () => {
+      const room = activeRef.current;
+      if (!room || room.type !== "STRANGER") return;
+      try {
+        await api(`/rooms/${room.id}/leave`, "POST", {});
+      } catch {}
+      if (ws.current?.readyState === 1)
+        try {
+          ws.current.send(
+            JSON.stringify({ type: "unsubscribe", roomId: room.id }),
+          );
+        } catch {}
+      setActive(null);
+      activeRef.current = null;
+      setMobileNav(false);
+      await loadSocial();
+      await heartbeat();
+      const r = await api("/match", "POST", {});
+      if (r.roomId) await openRoom(r.roomId);
+      else {
+        setQueue(true);
+        notify("Looking for someone new…");
+      }
+    });
   const isOwner =
     active?.creator_id === user?.id &&
     ["AVAILABLE_TONIGHT", "SHARED_GROUP"].includes(active?.type);
@@ -1163,6 +1188,7 @@ export function App() {
             onRequest={request}
             onModerate={moderation}
             onToggleBlock={toggleBlock}
+            onNext={nextStranger}
             joinRequests={active.joinRequests || []}
             rejectReasons={rejectReasons}
             onRejectReasonChange={(id, value) =>
@@ -1641,7 +1667,10 @@ export function App() {
             <h2>
               {queue ? "Finding a conversation…" : "Ready for a quick chat?"}
             </h2>
-            <p>No pressure. Leave, block or report whenever you need to.</p>
+            <p>
+              No pressure. Hit Next for someone new, or report whenever you need
+              to.
+            </p>
             {queue ? (
               <button
                 className="button secondary"
@@ -2091,16 +2120,24 @@ export function App() {
               <button
                 className="button secondary small room-leave-button"
                 onClick={() =>
-                  act(async () => {
-                    await api(`/rooms/${active.id}/leave`, "POST", {});
-                    setActive(null);
-                    activeRef.current = null;
-                    setMobileNav(false);
-                    await loadSocial();
-                  })
+                  active.type === "STRANGER"
+                    ? nextStranger()
+                    : act(async () => {
+                        await api(`/rooms/${active.id}/leave`, "POST", {});
+                        setActive(null);
+                        activeRef.current = null;
+                        setMobileNav(false);
+                        await loadSocial();
+                      })
                 }
               >
-                Leave room
+                {active.type === "STRANGER" ? (
+                  <>
+                    <Shuffle size={16} /> Next
+                  </>
+                ) : (
+                  "Leave room"
+                )}
               </button>
             </div>
             <div className="chat-layout">
