@@ -1,0 +1,31 @@
+name: Check
+on:
+  push:
+  pull_request:
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.9.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Install Celld 0.6.1
+        run: |
+          curl -fsSL https://celld.dev/install.sh -o /tmp/celld-install.sh
+          CELLD_VERSION=v0.6.1 sh /tmp/celld-install.sh
+      - run: pnpm check
+      - run: pnpm build
+      - run: pnpm test:native
+      - name: Native deployment dry run
+        env:
+          NODE_ENV: production
+          WEB_ORIGIN: https://charoo.example
+          MESSAGE_KEY: eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg=
+        run: pnpm run deploy -- --dry-run --bucket s3://charoo-dry-run

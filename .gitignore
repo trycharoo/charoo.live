@@ -1,0 +1,13 @@
+node_modules/
+.env
+.dev.vars
+.wrangler.deploy.jsonc
+.celld/
+coverage/
+dist/
+.context/
+.env.*
+!.env.example
+!.env.prod.example
+playwright-report/
+test-results/

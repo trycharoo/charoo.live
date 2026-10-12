@@ -1,0 +1,61 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { existsSync, readFileSync } from "node:fs";
+import { parse } from "dotenv";
+const envFile = process.env.CELLD_ENV_FILE || ".env";
+const environment = {
+  ...(existsSync(envFile) ? parse(readFileSync(envFile)) : {}),
+  ...process.env,
+};
+const providerOrigins = environment.LIVEKIT_URL
+  ? [
+      new URL(environment.LIVEKIT_URL).origin,
+      new URL(environment.LIVEKIT_URL.replace(/^ws/, "http")).origin,
+    ]
+  : [];
+const policy = [
+  `default-src 'self'`,
+  `script-src 'self'`,
+  `style-src 'self' 'unsafe-inline'`,
+  `img-src 'self' data:`,
+  `font-src 'self'`,
+  `connect-src 'self' ${providerOrigins.join(" ")}`,
+  `media-src 'self' blob: ${providerOrigins.join(" ")}`,
+  `object-src 'none'`,
+  `base-uri 'self'`,
+  `form-action 'self'`,
+  `frame-ancestors 'self'`,
+  ...(environment.NODE_ENV === "production"
+    ? ["upgrade-insecure-requests"]
+    : []),
+].join("; ");
+export default defineConfig(({ command }) => ({
+  // Worker configuration is loaded above; it must not change Vite's build mode.
+  envDir: false,
+  define: {
+    "process.env.NODE_ENV": JSON.stringify(
+      command === "build" ? "production" : "development",
+    ),
+  },
+  plugins: [
+    react(),
+    {
+      name: "asset-security-headers",
+      generateBundle() {
+        this.emitFile({
+          type: "asset",
+          fileName: "_headers",
+          source: `/*\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: SAMEORIGIN\n  Referrer-Policy: same-origin\n  Content-Security-Policy: ${policy}\n${environment.NODE_ENV === "production" ? "  Strict-Transport-Security: max-age=31536000; includeSubDomains\n" : ""}/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n/sw.js\n  Cache-Control: no-cache\n`,
+        });
+      },
+    },
+  ],
+  server: {
+    proxy: {
+      "/api": {
+        target: process.env.CELLD_API_TARGET || "http://127.0.0.1:9876",
+        ws: true,
+      },
+    },
+  },
+}));
