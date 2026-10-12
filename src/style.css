@@ -1479,18 +1479,147 @@ dialog label {
 .danger.small {
   padding: 7px;
 }
+.pending-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 18px 28px 0;
+  padding: 16px 18px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--accent-soft);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pending-banner.rejected {
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
+}
+.pending-banner > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+.pending-banner > div {
+  flex: 1;
+  min-width: 0;
+}
+.pending-banner strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.pending-banner span {
+  color: var(--muted);
+}
+.pending-banner .text-button {
+  white-space: nowrap;
+}
+.join-queue {
+  padding: 18px 0;
+  margin: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.join-queue > h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+.join-queue > h3 > span {
+  font-size: 11px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  border-radius: 20px;
+  padding: 4px 9px;
+}
+.join-request {
+  padding: 12px;
+  margin: 0 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.join-request > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.join-request-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.join-request-actions .button {
+  flex: 1;
+}
+.join-request-actions .member-action {
+  flex: 1;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--accent-soft);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text);
+}
+.join-request label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.join-request input {
+  width: 100%;
+  font-size: 12px;
+  padding: 9px 11px;
+}
+.pending-note {
+  font-size: 11px;
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.kicked-reason {
+  border: 1px solid var(--danger-line);
+  background: var(--danger-bg);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 14px 0;
+}
+.kicked-reason strong {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--danger);
+  margin-bottom: 6px;
+}
+.kicked-reason p {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
 .loading {
   min-height: 100vh;
   display: grid;
   align-content: center;
   justify-items: center;
   gap: 20px;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 dialog {
-  color: #f1e8ff;
-  background: #211a2c;
-  border: 1px solid #584364;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
   border-radius: 20px;
   width: min(510px, calc(100vw - 30px));
   padding: 27px;
@@ -1655,23 +1784,32 @@ dialog form > .button {
   justify-content: space-between;
   gap: 10px;
   font-size: 11px;
-  background: #241c2e;
+  background: var(--panel);
   padding: 12px;
-  border: 1px solid #3d2d4c;
+  border: 1px solid var(--line);
   border-radius: 10px;
 }
 .settings-form input[type="number"] {
   width: 80px;
 }
 .settings-form input[type="checkbox"] {
-  accent-color: var(--accent);
+  accent-color: var(--accent-text);
+}
+.admin-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 18px;
+}
+.admin-tabs {
+  margin: 0 0 8px;
 }
 .call-invite {
   position: fixed;
   bottom: 25px;
   right: 25px;
-  background: #413052;
-  border: 1px solid #826299;
+  background: var(--accent-soft-strong);
+  border: 1px solid var(--accent-line);
   display: flex;
   align-items: center;
   gap: 15px;

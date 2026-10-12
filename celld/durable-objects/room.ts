@@ -31,6 +31,16 @@ type Participant = {
   last_message_at: string | null;
   read_at: string | null;
   presence_until: number;
+  removed_reason?: string | null;
+  removed_at?: string | null;
+};
+type JoinRequest = {
+  id: string;
+  user_id: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  reason?: string | null;
+  created_at: string;
+  decided_at?: string | null;
 };
 type Attachment = {
   id: string;
@@ -73,6 +83,7 @@ export class Room extends DurableObject<Env> {
    CREATE TABLE IF NOT EXISTS charoo_fingerprints(user_id TEXT NOT NULL,fingerprint TEXT NOT NULL,PRIMARY KEY(user_id,fingerprint));
    CREATE TABLE IF NOT EXISTS charoo_attachments(id TEXT PRIMARY KEY,data TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS charoo_calls(id TEXT PRIMARY KEY,data TEXT NOT NULL);
+   CREATE TABLE IF NOT EXISTS charoo_join_requests(id TEXT PRIMARY KEY,data TEXT NOT NULL);
    CREATE TABLE IF NOT EXISTS charoo_outbox(id TEXT PRIMARY KEY,kind TEXT NOT NULL,payload TEXT NOT NULL);`);
   }
   private rows<T = any>(sql: string, ...params: any[]): T[] {
@@ -110,6 +121,27 @@ export class Room extends DurableObject<Env> {
       p.user_id,
       JSON.stringify(p),
     );
+  }
+  private joinRequests(): JoinRequest[] {
+    try {
+      return this.rows("SELECT data FROM charoo_join_requests").map((r) =>
+        JSON.parse(r.data),
+      );
+    } catch {
+      return [];
+    }
+  }
+  private saveJoinRequest(j: JoinRequest) {
+    this.ctx.storage.sql.exec(
+      "INSERT INTO charoo_join_requests(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+      j.id,
+      JSON.stringify(j),
+    );
+  }
+  private myJoinRequest(userId: string): JoinRequest | undefined {
+    return this.joinRequests()
+      .filter((j) => j.user_id === userId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   }
   private add(id: string) {
     this.saveParticipant({
@@ -308,25 +340,140 @@ export class Room extends DurableObject<Env> {
           403,
           "Guest access disabled",
         );
-        this.ctx.storage.transactionSync(() => {
-          this.open();
-          const p = this.participant(u.id);
+        // Public rooms join immediately. Link rooms knock first.
+        if (r.type === "AVAILABLE_TONIGHT") {
+          this.ctx.storage.transactionSync(() => {
+            this.open();
+            const p = this.participant(u.id);
+            requireThat(
+              p?.state !== "REMOVED",
+              403,
+              p?.removed_reason
+                ? `You were removed from this room: ${p.removed_reason}`
+                : "You were removed from this room",
+            );
+            if (p) {
+              p.state = "JOINED";
+              p.presence_until = Date.now() + 90000;
+              this.saveParticipant(p);
+            } else this.add(u.id);
+            this.changed();
+            this.event("room.changed");
+          });
+          await this.wake();
+          await this.flush();
+          return { id: r.id };
+        }
+        // SHARED_GROUP: approval queue. Returning members rejoin directly,
+        // brand-new link visitors create a pending request for the host.
+        const existing = this.participant(u.id);
+        if (existing?.state === "REMOVED")
           requireThat(
-            p?.state !== "REMOVED",
+            false,
             403,
-            "You were removed from this room",
+            existing.removed_reason
+              ? `You were removed from this room: ${existing.removed_reason}`
+              : "You were removed from this room",
           );
-          if (p) {
+        if (existing?.state === "JOINED") return { id: r.id };
+        if (existing?.state === "LEFT") {
+          this.ctx.storage.transactionSync(() => {
+            this.open();
+            const p = this.participant(u.id)!;
             p.state = "JOINED";
             p.presence_until = Date.now() + 90000;
             this.saveParticipant(p);
-          } else this.add(u.id);
+            this.changed();
+            this.event("room.changed");
+          });
+          await this.wake();
+          await this.flush();
+          return { id: r.id };
+        }
+        const mine = this.myJoinRequest(u.id);
+        if (mine?.status === "PENDING")
+          return {
+            pending: true,
+            roomId: r.id,
+            title: r.title,
+            requestId: mine.id,
+          };
+        if (mine?.status === "APPROVED") {
+          this.ctx.storage.transactionSync(() => {
+            this.open();
+            this.add(u.id);
+            this.changed();
+            this.event("room.changed");
+          });
+          await this.wake();
+          await this.flush();
+          return { id: r.id };
+        }
+        const created = this.ctx.storage.transactionSync(() => {
+          this.open();
+          // One active record per visitor: a new knock after a decision
+          // reuses the same row so cancel/status stay intuitive.
+          const previous = this.myJoinRequest(u.id);
+          const req: JoinRequest = {
+            id: previous?.id || crypto.randomUUID(),
+            user_id: u.id,
+            status: "PENDING",
+            created_at: iso(),
+          };
+          this.saveJoinRequest(req);
+          this.changed();
+          this.event("room.changed");
+          this.event(
+            "room.join_requested",
+            { requestId: req.id, userId: u.id, title: r.title },
+            [r.creator_id],
+          );
+          return req;
+        });
+        await this.wake();
+        await this.flush();
+        return {
+          pending: true,
+          roomId: r.id,
+          title: r.title,
+          requestId: created.id,
+        };
+      }
+      if (kind === "join_status") {
+        const r = this.meta();
+        const p = this.participant(u.id);
+        if (p?.state === "JOINED") return { status: "APPROVED", roomId: r.id };
+        if (p?.state === "REMOVED")
+          return {
+            status: "REMOVED",
+            roomId: r.id,
+            reason: p.removed_reason || null,
+          };
+        const mine = this.myJoinRequest(u.id);
+        if (!mine) return { status: "NONE", roomId: r.id, title: r.title };
+        return {
+          status: mine.status,
+          roomId: r.id,
+          title: r.title,
+          requestId: mine.id,
+          reason: mine.reason || null,
+        };
+      }
+      if (kind === "join_cancel") {
+        const r = this.meta();
+        const mine = this.myJoinRequest(u.id);
+        requireThat(mine?.status === "PENDING", 404, "No pending request");
+        this.ctx.storage.transactionSync(() => {
+          this.ctx.storage.sql.exec(
+            "DELETE FROM charoo_join_requests WHERE id=?",
+            mine.id,
+          );
           this.changed();
           this.event("room.changed");
         });
         await this.wake();
         await this.flush();
-        return { id: r.id };
+        return null;
       }
       const write = [
         "message",
@@ -530,7 +677,49 @@ export class Room extends DurableObject<Env> {
             403,
             "Room owner required",
           );
-          if (input.action === "CLOSE") await this.closeInternal(u.id);
+          if (input.action === "REMOVE") {
+            const reason = String(input.reason || "").trim();
+            requireThat(
+              reason.length >= 3 && reason.length <= 300,
+              400,
+              "Tell them why: add a short reason (3-300 characters)",
+            );
+            const target = this.participant(input.targetId!);
+            requireThat(
+              input.targetId && input.targetId !== u.id,
+              400,
+              "Choose another participant",
+            );
+            requireThat(
+              target?.state === "JOINED",
+              404,
+              "Participant unavailable",
+            );
+            this.ctx.storage.transactionSync(() => {
+              this.membership(u.id);
+              const p = this.participant(input.targetId!)!;
+              p.state = "REMOVED";
+              p.removed_reason = reason;
+              p.removed_at = iso();
+              this.saveParticipant(p);
+              this.changed();
+              this.event("room.changed");
+              this.event(
+                "room.removed",
+                {
+                  reason,
+                  title: this.meta().title,
+                  removedBy: u.display_name,
+                },
+                [p.user_id],
+              );
+              this.outbox("audit", {
+                actor: u.id,
+                action: "room.remove",
+                details: { targetId: input.targetId, reason },
+              });
+            });
+          } else if (input.action === "CLOSE") await this.closeInternal(u.id);
           else
             this.ctx.storage.transactionSync(() => {
               this.membership(u.id);
@@ -545,10 +734,8 @@ export class Room extends DurableObject<Env> {
                 404,
                 "Participant unavailable",
               );
-              if (input.action === "REMOVE") p.state = "REMOVED";
-              else
-                p.muted_until =
-                  input.action === "UNMUTE" ? null : iso(Date.now() + 1800000);
+              p.muted_until =
+                input.action === "UNMUTE" ? null : iso(Date.now() + 1800000);
               this.saveParticipant(p);
               this.changed();
               this.event("room.changed");
@@ -559,6 +746,89 @@ export class Room extends DurableObject<Env> {
               });
             });
           break;
+        }
+        case "join_requests": {
+          requireThat(
+            room.creator_id === u.id && room.type === "SHARED_GROUP",
+            403,
+            "Room owner required",
+          );
+          const list = this.joinRequests()
+            .sort((a, b) => a.created_at.localeCompare(b.created_at));
+          const out = [];
+          for (const j of list) {
+            const raw = await first(env, "SELECT * FROM users WHERE id=?", [
+              j.user_id,
+            ]);
+            out.push({
+              id: j.id,
+              userId: j.user_id,
+              displayName: raw?.display_name || "Guest",
+              verified: !!raw?.verified,
+              status: j.status,
+              reason: j.reason || null,
+              createdAt: j.created_at,
+              decidedAt: j.decided_at || null,
+            });
+          }
+          return out;
+        }
+        case "join_respond": {
+          requireThat(
+            room.creator_id === u.id && room.type === "SHARED_GROUP",
+            403,
+            "Room owner required",
+          );
+          const req = this.joinRequests().find((j) => j.id === input.requestId);
+          requireThat(req, 404, "Request unavailable");
+          requireThat(req.status === "PENDING", 409, "Already decided");
+          const accept = !!input.accept;
+          const reason = String(input.reason || "").trim() || null;
+          if (!accept)
+            requireThat(
+              !reason || (reason.length >= 3 && reason.length <= 300),
+              400,
+              "Add a short reason (3-300 characters) or leave it empty",
+            );
+          this.ctx.storage.transactionSync(() => {
+            this.membership(u.id);
+            req.status = accept ? "APPROVED" : "REJECTED";
+            req.reason = reason;
+            req.decided_at = iso();
+            this.saveJoinRequest(req);
+            if (accept) {
+              const p = this.participant(req.user_id);
+              if (!p) this.add(req.user_id);
+              else if (p.state !== "REMOVED") {
+                p.state = "JOINED";
+                p.presence_until = Date.now() + 90000;
+                this.saveParticipant(p);
+              } else
+                requireThat(false, 403, "That user was removed from this room");
+            }
+            this.changed();
+            this.event("room.changed");
+            if (accept)
+              this.event(
+                "room.join_approved",
+                { title: this.meta().title },
+                [req.user_id],
+              );
+            else
+              this.event(
+                "room.join_rejected",
+                { title: this.meta().title, reason },
+                [req.user_id],
+              );
+            this.outbox("audit", {
+              actor: u.id,
+              action: accept ? "room.join_approve" : "room.join_reject",
+              details: { targetId: req.user_id, requestId: req.id, reason },
+            });
+          });
+          await this.wake();
+          await this.flush();
+          return { status: req.status };
         }
         case "invite": {
           requireThat(
@@ -888,12 +1158,34 @@ export class Room extends DurableObject<Env> {
     await this.permit(actor);
     const self = this.participant(actor.userId)!;
     const { invite, purged, ...safe } = this.meta();
+    const isHost =
+      r.type === "SHARED_GROUP" && r.creator_id === actor.userId;
+    const allRequests = r.type === "SHARED_GROUP" ? this.joinRequests() : [];
+    const pendingRequests = allRequests.filter((j) => j.status === "PENDING");
+    let joinRequests: any[] | undefined;
+    if (isHost) {
+      joinRequests = [];
+      for (const j of allRequests.sort((a, b) =>
+        a.created_at.localeCompare(b.created_at),
+      )) {
+        const raw = await first(this.env, "SELECT * FROM users WHERE id=?", [
+          j.user_id,
+        ]);
+        joinRequests.push({
+          id: j.id,
+          userId: j.user_id,
+          displayName: raw?.display_name || "Guest",
+          verified: !!raw?.verified,
+          status: j.status,
+          reason: j.reason || null,
+          createdAt: j.created_at,
+          decidedAt: j.decided_at || null,
+        });
+      }
+    }
     return {
       ...safe,
-      shareUrl:
-        r.type === "SHARED_GROUP" && r.creator_id === actor.userId
-          ? await this.inviteUrl()
-          : undefined,
+      shareUrl: isHost ? await this.inviteUrl() : undefined,
       online: this.people().filter(
         (p) => p.state === "JOINED" && p.presence_until > Date.now(),
       ).length,
@@ -906,6 +1198,8 @@ export class Room extends DurableObject<Env> {
         id: p.user_id,
         count: p.meaningful_count,
       })),
+      pendingJoinCount: pendingRequests.length,
+      joinRequests,
     };
   }
   private async messages(actor: Actor, before?: string) {
@@ -1404,6 +1698,7 @@ export class Room extends DurableObject<Env> {
           "charoo_fingerprints",
           "charoo_attachments",
           "charoo_calls",
+          "charoo_join_requests",
         ])
           this.ctx.storage.sql.exec(`DELETE FROM ${table}`);
         current.purged = true;

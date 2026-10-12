@@ -148,7 +148,35 @@ export function roomRoutes(app: Hono<HttpEnv>) {
     roomStub(c.env, uuid(c.req.param("roomId"))).fetch(socketRequest(c)),
   );
   app.post("/api/rooms/:roomId/join", async (c) => {
-    await command(c, "join");
+    const result = await command(c, "join");
+    if (result && typeof result === "object" && "pending" in result)
+      return c.json(result, 202);
+    return c.json(result ?? {});
+  });
+  app.get("/api/rooms/:roomId/join-status", async (c) =>
+    c.json(await command(c, "join_status")),
+  );
+  app.get("/api/rooms/:roomId/join-requests", async (c) =>
+    c.json(await command(c, "join_requests")),
+  );
+  app.post(
+    "/api/rooms/:roomId/join-requests/:requestId/respond",
+    body(
+      z.object({
+        accept: z.boolean(),
+        reason: z.string().trim().max(300).optional().default(""),
+      }),
+    ),
+    async (c) =>
+      c.json(
+        await command(c, "join_respond", {
+          ...c.get("input"),
+          requestId: c.req.param("requestId"),
+        }),
+      ),
+  );
+  app.post("/api/rooms/:roomId/join-requests/cancel", async (c) => {
+    await command(c, "join_cancel");
     return c.body(null, 204);
   });
   app.post("/api/rooms/:roomId/invite", async (c) =>
@@ -207,6 +235,7 @@ export function roomRoutes(app: Hono<HttpEnv>) {
           .uuid()
           .transform((value) => value.toLowerCase())
           .optional(),
+        reason: z.string().trim().max(300).optional().default(""),
       }),
     ),
     async (c) => {

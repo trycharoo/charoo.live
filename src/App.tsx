@@ -210,13 +210,37 @@ export function App() {
     [adminReports, setAdminReports] = useState<any[]>([]),
     [adminRooms, setAdminRooms] = useState<any[]>([]),
     [audit, setAudit] = useState<any[]>([]),
+    [adminUsers, setAdminUsers] = useState<any[]>([]),
+    [adminTab, setAdminTab] = useState<
+      "reports" | "rooms" | "users" | "settings"
+    >("reports"),
+    [adminLoading, setAdminLoading] = useState(false),
+    [userSearch, setUserSearch] = useState(""),
     [calls, setCalls] = useState<any[]>([]),
     [callId, setCallId] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [googleEnabled, setGoogleEnabled] = useState(false),
     [feedNext, setFeedNext] = useState<string | null>(null),
     [messageNext, setMessageNext] = useState<string | null>(null),
-    [install, setInstall] = useState<any>(null);
+    [install, setInstall] = useState<any>(null),
+    [kicked, setKicked] = useState<{
+      title: string;
+      reason: string;
+      by?: string;
+    } | null>(null),
+    [pendingJoin, setPendingJoin] = useState<{
+      roomId: string;
+      title: string;
+      requestId: string;
+      reason?: string | null;
+      rejected?: boolean;
+    } | null>(null),
+    [kickTarget, setKickTarget] = useState<{
+      id: string;
+      name: string;
+    } | null>(null),
+    [kickReason, setKickReason] = useState(""),
+    [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   const ws = useRef<Realtime | null>(null),
     activeRef = useRef<any>(null),
     userRef = useRef<User | null>(null),
@@ -326,9 +350,18 @@ export function App() {
       await api(`/rooms/${room.id}/read`, "POST", {});
     } catch (e) {
       if (activeRef.current?.id !== room.id) return;
+      const message = (e as Error).message;
       setActive(null);
       activeRef.current = null;
-      notify((e as Error).message, true);
+      if (/removed from this room/i.test(message)) {
+        setKicked({
+          title: room.title || "This room",
+          reason:
+            message.replace(/^.*?removed from this room:?\s*/i, "") || message,
+        });
+      } else {
+        notify(message, true);
+      }
     }
   }
   async function heartbeat() {
@@ -341,24 +374,41 @@ export function App() {
     explicitAvailable.current = false;
     setStatus(value.status);
   }
-  async function loadAdmin() {
-    const [d, r, rs] = await Promise.all([
-      api("/admin/dashboard"),
-      api("/admin/reports"),
-      api("/admin/rooms"),
-    ]);
-    setAdmin(d);
-    setAdminReports(r);
-    setAdminRooms(rs);
-    if (userRef.current?.role === "ADMIN") setAudit(await api("/admin/audit"));
+  async function loadAdmin(searchUsers = userSearch) {
+    setAdminLoading(true);
+    try {
+      const [d, r, rs, us] = await Promise.all([
+        api("/admin/dashboard"),
+        api("/admin/reports"),
+        api("/admin/rooms"),
+        api(`/admin/users?q=${encodeURIComponent(searchUsers)}&limit=30`),
+      ]);
+      setAdmin(d);
+      setAdminReports(r);
+      setAdminRooms(rs);
+      setAdminUsers(us);
+      if (userRef.current?.role === "ADMIN")
+        setAudit(await api("/admin/audit"));
+    } finally {
+      setAdminLoading(false);
+    }
   }
   async function joinShared() {
     if (joinProfilePending) return;
     const t = new URLSearchParams(location.hash.slice(1)).get("room");
     if (t) {
       try {
-        const room = await api("/shared/join", "POST", { token: t });
-        await openRoom(room.id);
+        const result = await api("/shared/join", "POST", { token: t });
+        if (result.pending) {
+          setPendingJoin({
+            roomId: result.roomId,
+            title: result.title || "This room",
+            requestId: result.requestId,
+          });
+          notify("Request sent. The host will review it shortly.");
+          return;
+        }
+        await openRoom(result.id);
         await loadSocial();
         const params = new URLSearchParams(location.hash.slice(1));
         if (params.get("room") === t) {
@@ -374,6 +424,35 @@ export function App() {
         throw e;
       }
     }
+  }
+  async function checkPendingJoin() {
+    if (!pendingJoin || pendingJoin.rejected) return;
+    try {
+      const s = await api(`/rooms/${pendingJoin.roomId}/join-status`);
+      if (s.status === "APPROVED") {
+        setPendingJoin(null);
+        await openRoom(pendingJoin.roomId);
+        await loadSocial();
+        const params = new URLSearchParams(location.hash.slice(1));
+        params.delete("room");
+        window.history.replaceState(
+          null,
+          "",
+          `${location.pathname}${location.search}${params.size ? `#${params}` : ""}`,
+        );
+        notify("Your request was accepted. Welcome in.");
+      } else if (s.status === "REJECTED") {
+        setPendingJoin((p) =>
+          p ? { ...p, rejected: true, reason: s.reason } : p,
+        );
+      } else if (s.status === "REMOVED") {
+        setPendingJoin(null);
+        setKicked({
+          title: s.title || pendingJoin.title,
+          reason: s.reason || "You were removed from this room",
+        });
+      }
+    } catch {}
   }
   useEffect(() => {
     if (!bootstrapped.current) {
@@ -529,6 +608,11 @@ export function App() {
     );
     return () => clearInterval(t);
   }, [queue]);
+  useEffect(() => {
+    if (!pendingJoin || pendingJoin.rejected) return;
+    const t = setInterval(() => checkPendingJoin().catch(() => {}), 4000);
+    return () => clearInterval(t);
+  }, [pendingJoin?.roomId, pendingJoin?.rejected]);
   actionRef.current = (event: any) => {
     if (event.type === "ack") {
       const ack = acks.current.get(event.payload.clientMessageId);
@@ -545,10 +629,80 @@ export function App() {
         await openRoom(event.payload.roomId);
         await loadSocial();
       });
+    if (event.type === "room.removed") {
+      if (ws.current?.readyState === 1 && event.roomId)
+        try {
+          ws.current.send(
+            JSON.stringify({ type: "unsubscribe", roomId: event.roomId }),
+          );
+        } catch {}
+      if (activeRef.current?.id === event.roomId) {
+        setActive(null);
+        activeRef.current = null;
+      }
+      setKicked({
+        title: event.payload?.title || "This room",
+        reason: event.payload?.reason || "The host removed you from the room.",
+        by: event.payload?.removedBy,
+      });
+      background(loadSocial);
+      return;
+    }
+    if (event.type === "room.join_approved") {
+      background(async () => {
+        setPendingJoin(null);
+        await openRoom(event.roomId);
+        await loadSocial();
+        const params = new URLSearchParams(location.hash.slice(1));
+        if (params.has("room")) {
+          params.delete("room");
+          window.history.replaceState(
+            null,
+            "",
+            `${location.pathname}${location.search}${params.size ? `#${params}` : ""}`,
+          );
+        }
+        notify(
+          `Your request to join ${event.payload?.title || "the room"} was accepted. Welcome in.`,
+        );
+      });
+      return;
+    }
+    if (event.type === "room.join_rejected") {
+      setPendingJoin((p) =>
+        p && p.roomId === event.roomId
+          ? {
+              ...p,
+              rejected: true,
+              reason: event.payload?.reason || null,
+              title: event.payload?.title || p.title,
+            }
+          : p,
+      );
+      notify(
+        event.payload?.reason
+          ? `Your request was declined: ${event.payload.reason}`
+          : "Your request to join was declined.",
+        true,
+      );
+      return;
+    }
     if (
-      ["message", "room.changed"].includes(event.type) &&
-      event.roomId === activeRef.current?.id
-    )
+      ["room.join_requested", "message", "room.changed"].includes(event.type) &&
+      (!event.roomId || event.roomId === activeRef.current?.id)
+    ) {
+      if (event.type === "room.join_requested" && !activeRef.current)
+        background(loadSocial);
+      else background(refreshChat);
+      if (event.type === "room.join_requested")
+        notify(
+          event.payload?.title
+            ? `A new request to join “${event.payload.title}” is waiting for review.`
+            : "A new request to join is waiting for review.",
+        );
+      return;
+    }
+    if (event.type === "room.changed" && event.roomId === activeRef.current?.id)
       background(refreshChat);
     if (
       event.type === "room.closed" &&
@@ -856,12 +1010,28 @@ export function App() {
       });
       notify("Request sent. They decide whether to accept.");
     });
-  const moderation = (action: string, targetId?: string) =>
+  const moderation = (action: string, targetId?: string, reason?: string) =>
     act(async () => {
-      await api(`/rooms/${active.id}/moderate`, "POST", { action, targetId });
+      if (action === "REMOVE" && !reason) {
+        const peer = active?.participants?.find((p: any) => p.id === targetId);
+        setKickTarget({ id: targetId!, name: peer?.name || "this member" });
+        setKickReason("");
+        setModal("kick");
+        return;
+      }
+      await api(`/rooms/${active.id}/moderate`, "POST", {
+        action,
+        targetId,
+        reason,
+      });
       if (action === "CLOSE") {
         choosePage(page);
       } else {
+        if (action === "REMOVE") {
+          setKickTarget(null);
+          setKickReason("");
+          setModal(null);
+        }
         await refreshChat();
         if (action === "MUTE")
           notify(
@@ -869,8 +1039,40 @@ export function App() {
           );
         if (action === "UNMUTE")
           notify("Member unmuted. They can send messages again.");
-        if (action === "REMOVE") notify("Member removed from this room.");
+        if (action === "REMOVE")
+          notify(
+            reason
+              ? `Member removed: ${reason}`
+              : "Member removed from this room.",
+          );
       }
+    });
+  const respondJoinRequest = (requestId: string, accept: boolean) =>
+    act(async () => {
+      const reason = (rejectReasons[requestId] || "").trim();
+      if (!accept && reason && (reason.length < 3 || reason.length > 300))
+        throw new Error(
+          "Add a short reason (3-300 characters) or leave it empty",
+        );
+      await api(
+        `/rooms/${active.id}/join-requests/${requestId}/respond`,
+        "POST",
+        {
+          accept,
+          reason,
+        },
+      );
+      setRejectReasons((prev) => {
+        const next = { ...prev };
+        delete next[requestId];
+        return next;
+      });
+      await refreshChat();
+      notify(
+        accept
+          ? "Request accepted. They are in the room now."
+          : "Request declined. They will see your reason.",
+      );
     });
   const toggleBlock = (targetId: string) =>
     act(async () => {
@@ -944,6 +1146,12 @@ export function App() {
             onRequest={request}
             onModerate={moderation}
             onToggleBlock={toggleBlock}
+            joinRequests={active.joinRequests || []}
+            rejectReasons={rejectReasons}
+            onRejectReasonChange={(id, value) =>
+              setRejectReasons((prev) => ({ ...prev, [id]: value }))
+            }
+            onRespondJoin={respondJoinRequest}
             onVideoInvite={(targetId) =>
               act(async () => {
                 await api("/calls", "POST", { roomId: active.id, targetId });
@@ -1125,6 +1333,71 @@ export function App() {
             )}
           </div>
         </header>
+        {pendingJoin && (
+          <section
+            className={`pending-banner ${pendingJoin.rejected ? "rejected" : ""}`}
+            role="status"
+            aria-live="polite"
+          >
+            <Clock size={18} />
+            <div>
+              <strong>
+                {pendingJoin.rejected
+                  ? `Request to join “${pendingJoin.title}” was declined`
+                  : `Request to join “${pendingJoin.title}” is pending`}
+              </strong>
+              <span>
+                {pendingJoin.rejected
+                  ? pendingJoin.reason
+                    ? `Reason: ${pendingJoin.reason}`
+                    : "The host declined your request. You can try another room."
+                  : "The host has been notified. You will join automatically once accepted. You can wait here or come back later."}
+              </span>
+            </div>
+            {!pendingJoin.rejected ? (
+              <>
+                <button
+                  className="text-button"
+                  onClick={() => act(checkPendingJoin)}
+                >
+                  Check again
+                </button>
+                <button
+                  className="text-button"
+                  onClick={() =>
+                    act(async () => {
+                      await api(
+                        `/rooms/${pendingJoin.roomId}/join-requests/cancel`,
+                        "POST",
+                        {},
+                      );
+                      setPendingJoin(null);
+                      notify("Join request cancelled.");
+                    })
+                  }
+                >
+                  Cancel request
+                </button>
+              </>
+            ) : (
+              <button
+                className="button small secondary"
+                onClick={() => {
+                  setPendingJoin(null);
+                  const params = new URLSearchParams(location.hash.slice(1));
+                  params.delete("room");
+                  window.history.replaceState(
+                    null,
+                    "",
+                    `${location.pathname}${location.search}${params.size ? `#${params}` : ""}`,
+                  );
+                }}
+              >
+                Dismiss
+              </button>
+            )}
+          </section>
+        )}
         {!active && ["groups", "tonight"].includes(page) && (
           <section className="hero">
             <div className="hero-copy">
@@ -2051,214 +2324,360 @@ export function App() {
             </div>
           </section>
         )}
-        {!active &&
-          page === "admin" &&
-          user &&
-          user.role !== "USER" &&
-          admin && (
-            <section className="content-page admin-page">
-              <span className="eyebrow">CHAROO OPERATIONS</span>
-              <h1>
-                Community care<span className="accent">.</span>
-              </h1>
-              <div className="stats">
-                {[
-                  ["Accounts", admin.users],
-                  ["Public rooms", admin.public_rooms],
-                  ["Shared rooms", admin.shared_rooms],
-                  ["Open reports", admin.reports],
-                  ["Match queue", admin.queue],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <span>{k}</span>
-                    <strong>{v}</strong>
-                  </div>
-                ))}
-              </div>
-              <h2>Reports</h2>
-              <div className="list">
-                {adminReports.map((r) => (
-                  <div key={r.id}>
-                    <span>
-                      {r.reason}
-                      <small>
-                        {r.state} · {new Date(r.created_at).toLocaleString()}
-                        <br />
-                        User: {r.target_id || "—"} · Room: {r.room_id || "—"}
-                      </small>
-                    </span>
-                    {user.role !== "SUPPORT" && r.message_id && (
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          act(async () => {
-                            const evidence = await api(
-                              `/admin/reports/${r.id}/evidence`,
-                            );
-                            notify(
-                              evidence.text || "Reported content has expired.",
-                            );
-                          })
-                        }
-                      >
-                        View reported message
-                      </button>
-                    )}
-                    {user.role !== "SUPPORT" && r.state === "OPEN" && (
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          act(async () => {
-                            await api("/admin/actions", "POST", {
-                              action: "RESOLVE_REPORT",
-                              targetId: r.id,
-                            });
-                            await loadAdmin();
-                          })
-                        }
-                      >
-                        Resolve
-                      </button>
-                    )}
-                    {user.role !== "SUPPORT" && r.target_id && (
-                      <>
-                        <button
-                          className="text-button"
-                          onClick={() =>
-                            act(async () => {
-                              await api("/admin/actions", "POST", {
-                                action: "SUSPEND",
-                                targetId: r.target_id,
-                              });
-                              await loadAdmin();
-                            })
-                          }
-                        >
-                          Suspend 24h
-                        </button>
-                        <button
-                          className="danger small"
-                          onClick={() =>
-                            act(async () => {
-                              await api("/admin/actions", "POST", {
-                                action: "BAN",
-                                targetId: r.target_id,
-                              });
-                              await loadAdmin();
-                            })
-                          }
-                        >
-                          Ban
-                        </button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <h2>Rooms</h2>
-              <div className="list">
-                {adminRooms.map((r) => (
-                  <div key={r.id}>
-                    <span>
-                      {r.title}
-                      <small>
-                        {r.type} · {r.state}
-                      </small>
-                    </span>
-                    {user.role !== "SUPPORT" && r.message_id && (
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          act(async () => {
-                            const evidence = await api(
-                              `/admin/reports/${r.id}/evidence`,
-                            );
-                            notify(
-                              evidence.text || "Reported content has expired.",
-                            );
-                          })
-                        }
-                      >
-                        View reported message
-                      </button>
-                    )}
-                    {user.role !== "SUPPORT" && r.state === "OPEN" && (
-                      <button
-                        className="text-button"
-                        onClick={() =>
-                          act(async () => {
-                            await api("/admin/actions", "POST", {
-                              action: "CLOSE_ROOM",
-                              targetId: r.id,
-                            });
-                            await loadAdmin();
-                          })
-                        }
-                      >
-                        Close
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {user.role === "ADMIN" && (
-                <>
-                  <h2>System settings</h2>
-                  <form
-                    className="settings-form"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      act(async () => {
-                        const data = new FormData(e.currentTarget);
-                        const cfg = Object.fromEntries(
-                          Object.entries(admin.settings).map(([k, v]) => [
-                            k,
-                            typeof v === "boolean"
-                              ? data.has(k)
-                              : Number(data.get(k)),
-                          ]),
-                        );
-                        await api("/admin/settings", "PATCH", cfg);
-                        notify("Settings updated.");
-                        await loadAdmin();
-                      });
-                    }}
-                  >
-                    {Object.entries(admin.settings).map(([k, v]) => (
-                      <label key={k}>
-                        {k.replaceAll("_", " ")}
-                        {typeof v === "boolean" ? (
-                          <input type="checkbox" name={k} defaultChecked={v} />
-                        ) : (
-                          <input
-                            type="number"
-                            name={k}
-                            defaultValue={Number(v)}
-                            readOnly={k === "reconnect_price"}
-                          />
-                        )}
-                      </label>
-                    ))}
-                    <button className="button">Save settings</button>
-                  </form>
-                  <h2>Audit trail</h2>
-                  <div className="list">
-                    {audit.map((a) => (
-                      <div key={a.id}>
-                        <span>
-                          {a.action}
-                          <small>
-                            {a.target_id} ·{" "}
-                            {new Date(a.created_at).toLocaleString()}
-                          </small>
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </>
+        {!active && page === "admin" && user && user.role !== "USER" && (
+          <section className="content-page admin-page">
+            <span className="eyebrow">CHAROO OPERATIONS</span>
+            <h1>
+              Community care<span className="accent">.</span>
+            </h1>
+            <div className="admin-bar">
+              <button
+                className="button secondary small"
+                disabled={adminLoading}
+                onClick={() => act(() => loadAdmin())}
+              >
+                {adminLoading ? "Refreshing…" : "Refresh"}
+              </button>
+              {admin && (
+                <span className="muted">
+                  {admin.reports} open reports · {adminRooms.length} rooms
+                  listed · {adminUsers.length} users listed
+                </span>
               )}
-            </section>
-          )}
+            </div>
+            {!admin && adminLoading && <p className="muted">Loading…</p>}
+            {admin && (
+              <>
+                <div className="stats">
+                  {[
+                    ["Accounts", admin.users],
+                    ["Public rooms", admin.public_rooms],
+                    ["Shared rooms", admin.shared_rooms],
+                    ["Open reports", admin.reports],
+                    ["Match queue", admin.queue],
+                  ].map(([k, v]) => (
+                    <div key={k}>
+                      <span>{k}</span>
+                      <strong>{v}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div className="chips admin-tabs" role="tablist">
+                  {(
+                    [
+                      [
+                        "reports",
+                        `Reports (${adminReports.filter((r) => r.state === "OPEN").length})`,
+                      ],
+                      ["rooms", `Rooms (${adminRooms.length})`],
+                      ["users", `Users (${adminUsers.length})`],
+                      ...(user.role === "ADMIN"
+                        ? [["settings", "Settings & audit"] as const]
+                        : []),
+                    ] as const
+                  ).map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      role="tab"
+                      aria-selected={adminTab === tab}
+                      className={adminTab === tab ? "active" : ""}
+                      onClick={() => setAdminTab(tab)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {adminTab === "reports" && (
+                  <>
+                    <h2>Reports</h2>
+                    <div className="list">
+                      {adminReports.map((r) => (
+                        <div key={r.id}>
+                          <span>
+                            {r.reason}
+                            <small>
+                              {r.state} ·{" "}
+                              {new Date(r.created_at).toLocaleString()}
+                              <br />
+                              User: {r.target_id || "—"} · Room:{" "}
+                              {r.room_id || "—"}
+                            </small>
+                          </span>
+                          {user.role !== "SUPPORT" && r.message_id && (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                act(async () => {
+                                  const evidence = await api(
+                                    `/admin/reports/${r.id}/evidence`,
+                                  );
+                                  notify(
+                                    evidence.text ||
+                                      "Reported content has expired.",
+                                  );
+                                })
+                              }
+                            >
+                              View reported message
+                            </button>
+                          )}
+                          {user.role !== "SUPPORT" && r.state === "OPEN" && (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                act(async () => {
+                                  await api("/admin/actions", "POST", {
+                                    action: "RESOLVE_REPORT",
+                                    targetId: r.id,
+                                  });
+                                  await loadAdmin();
+                                })
+                              }
+                            >
+                              Resolve
+                            </button>
+                          )}
+                          {user.role !== "SUPPORT" && r.target_id && (
+                            <>
+                              <button
+                                className="text-button"
+                                onClick={() =>
+                                  act(async () => {
+                                    await api("/admin/actions", "POST", {
+                                      action: "SUSPEND",
+                                      targetId: r.target_id,
+                                    });
+                                    await loadAdmin();
+                                  })
+                                }
+                              >
+                                Suspend 24h
+                              </button>
+                              <button
+                                className="danger small"
+                                onClick={() =>
+                                  act(async () => {
+                                    await api("/admin/actions", "POST", {
+                                      action: "BAN",
+                                      targetId: r.target_id,
+                                    });
+                                    await loadAdmin();
+                                  })
+                                }
+                              >
+                                Ban
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {!adminReports.length && (
+                      <p className="muted">No reports. Queue is clear.</p>
+                    )}
+                  </>
+                )}
+                {adminTab === "rooms" && (
+                  <>
+                    <h2>Rooms</h2>
+                    <div className="list">
+                      {adminRooms.map((r) => (
+                        <div key={r.id}>
+                          <span>
+                            {r.title || "(untitled room)"}
+                            <small>
+                              {r.type} · {r.state} ·{" "}
+                              {new Date(r.created_at).toLocaleString()}
+                            </small>
+                          </span>
+                          {user.role !== "SUPPORT" && r.state === "OPEN" && (
+                            <button
+                              className="text-button"
+                              onClick={() =>
+                                act(async () => {
+                                  await api("/admin/actions", "POST", {
+                                    action: "CLOSE_ROOM",
+                                    targetId: r.id,
+                                  });
+                                  await loadAdmin();
+                                })
+                              }
+                            >
+                              Close
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    {!adminRooms.length && (
+                      <p className="muted">No rooms found.</p>
+                    )}
+                  </>
+                )}
+                {adminTab === "users" && (
+                  <>
+                    <h2>Users</h2>
+                    <form
+                      className="filters"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        act(() => loadAdmin(userSearch));
+                      }}
+                    >
+                      <label className="search">
+                        <Search size={18} />
+                        <input
+                          placeholder="Search name or email…"
+                          value={userSearch}
+                          onChange={(e) => setUserSearch(e.target.value)}
+                        />
+                      </label>
+                      <button className="button secondary small" type="submit">
+                        Search
+                      </button>
+                    </form>
+                    <div className="list">
+                      {adminUsers.map((u) => (
+                        <div key={u.id}>
+                          <span>
+                            {u.display_name}
+                            <small>
+                              {u.email || "no email"} · {u.role}
+                              {u.verified ? " · verified" : " · guest"} ·{" "}
+                              {new Date(u.created_at).toLocaleDateString()}
+                              {u.banned ? " · BANNED" : ""}
+                              {u.suspended_until &&
+                              Date.parse(u.suspended_until) > Date.now()
+                                ? ` · suspended until ${new Date(u.suspended_until).toLocaleString()}`
+                                : ""}
+                            </small>
+                          </span>
+                          {user.role !== "SUPPORT" &&
+                            u.id !== user.id &&
+                            u.role === "USER" && (
+                              <>
+                                <button
+                                  className="text-button"
+                                  onClick={() =>
+                                    act(async () => {
+                                      await api("/admin/actions", "POST", {
+                                        action: "SUSPEND",
+                                        targetId: u.id,
+                                      });
+                                      await loadAdmin();
+                                    })
+                                  }
+                                >
+                                  Suspend 24h
+                                </button>
+                                <button
+                                  className="danger small"
+                                  onClick={() =>
+                                    act(async () => {
+                                      await api("/admin/actions", "POST", {
+                                        action: "BAN",
+                                        targetId: u.id,
+                                      });
+                                      await loadAdmin();
+                                    })
+                                  }
+                                >
+                                  Ban
+                                </button>
+                              </>
+                            )}
+                        </div>
+                      ))}
+                    </div>
+                    {!adminUsers.length && (
+                      <p className="muted">No users match this search.</p>
+                    )}
+                    <p className="form-note">
+                      Staff roles are granted via CLI:{" "}
+                      <code>pnpm admin:grant &lt;userId&gt; MODERATOR</code>
+                    </p>
+                  </>
+                )}
+                {adminTab === "settings" && user.role === "ADMIN" && (
+                  <>
+                    <h2>System settings</h2>
+                    <form
+                      className="settings-form"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        act(async () => {
+                          const data = new FormData(e.currentTarget);
+                          const cfg = Object.fromEntries(
+                            Object.entries(admin.settings).map(([k, v]) => [
+                              k,
+                              typeof v === "boolean"
+                                ? data.has(k)
+                                : Number(data.get(k)),
+                            ]),
+                          );
+                          await api("/admin/settings", "PATCH", cfg);
+                          notify("Settings updated.");
+                          await loadAdmin();
+                        });
+                      }}
+                    >
+                      {Object.entries(admin.settings).map(([k, v]) => (
+                        <label key={k}>
+                          {k.replaceAll("_", " ")}
+                          {typeof v === "boolean" ? (
+                            <input
+                              type="checkbox"
+                              name={k}
+                              defaultChecked={v}
+                            />
+                          ) : (
+                            <input
+                              type="number"
+                              name={k}
+                              defaultValue={Number(v)}
+                              readOnly={k === "reconnect_price"}
+                            />
+                          )}
+                        </label>
+                      ))}
+                      <button className="button">Save settings</button>
+                    </form>
+                    <h2>Audit trail</h2>
+                    <div className="list">
+                      {audit.map((a) => (
+                        <div key={a.id}>
+                          <span>
+                            {a.action}
+                            <small>
+                              target {a.target_id || "—"} · actor{" "}
+                              {a.actor_id || "—"} ·{" "}
+                              {new Date(a.created_at).toLocaleString()}
+                              {a.details?.reason
+                                ? ` · reason: ${a.details.reason}`
+                                : ""}
+                            </small>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {!audit.length && (
+                      <p className="muted">No audit entries yet.</p>
+                    )}
+                  </>
+                )}
+              </>
+            )}
+          </section>
+        )}
+        {!active && page === "admin" && user && user.role === "USER" && (
+          <section className="content-page">
+            <span className="eyebrow">CHAROO OPERATIONS</span>
+            <h1>
+              Moderators only<span className="accent">.</span>
+            </h1>
+            <p>Your account does not have staff access.</p>
+          </section>
+        )}
       </main>
       {!active && (
         <nav className="mobile-nav" aria-label="Mobile navigation">
@@ -2387,6 +2806,38 @@ export function App() {
           </button>
         </div>
       )}
+      {kicked && (
+        <Modal title="You were removed" onClose={() => setKicked(null)}>
+          <p>
+            The host removed you from “{kicked.title}”
+            {kicked.by ? ` (by ${kicked.by})` : ""}.
+          </p>
+          <div className="kicked-reason" role="status">
+            <strong>Reason from the host</strong>
+            <p>{kicked.reason}</p>
+          </div>
+          <p className="form-note">
+            You can no longer rejoin this room with the same link. Contact the
+            host if you think this was a mistake.
+          </p>
+          <button
+            className="button"
+            onClick={() => {
+              setKicked(null);
+              const params = new URLSearchParams(location.hash.slice(1));
+              params.delete("room");
+              window.history.replaceState(
+                null,
+                "",
+                `${location.pathname}${location.search}${params.size ? `#${params}` : ""}`,
+              );
+              choosePage("groups");
+            }}
+          >
+            Back to rooms
+          </button>
+        </Modal>
+      )}
       {modal && (
         <Modal
           title={
@@ -2408,12 +2859,18 @@ export function App() {
                           ? "Your room, your topic"
                           : modal === "public"
                             ? "Start a public conversation"
-                            : "Create your room"
+                            : modal === "kick"
+                              ? `Remove ${kickTarget?.name || "member"}`
+                              : "Create your room"
           }
           onClose={() => {
             setModal(null);
             setCreateAfterGuest(false);
             if (modal === "report") setReply(null);
+            if (modal === "kick") {
+              setKickTarget(null);
+              setKickReason("");
+            }
           }}
         >
           {googleEnabled && ["guest", "email"].includes(modal) && (
@@ -2509,8 +2966,9 @@ export function App() {
           ) : ["share", "invite"].includes(modal) ? (
             <>
               <p>
-                Send this URL to bring everyone together. Anyone with the link
-                can join unless you enabled email verification.
+                Send this URL to bring everyone together. Visitors request to
+                join and you approve each one unless you enabled email
+                verification (verified guests still request approval).
               </p>
               <input
                 ref={shareLinkInput}
@@ -2609,6 +3067,53 @@ export function App() {
                 />
               </label>
               <button className="button">Save changes</button>
+            </form>
+          ) : modal === "kick" ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (
+                  kickReason.trim().length < 3 ||
+                  kickReason.trim().length > 300
+                ) {
+                  notify(
+                    "Add a short reason (3-300 characters) so they understand why.",
+                    true,
+                  );
+                  return;
+                }
+                moderation("REMOVE", kickTarget?.id, kickReason.trim());
+              }}
+            >
+              <p>
+                {kickTarget?.name} will be removed immediately and will see your
+                reason. They cannot rejoin with the same link.
+              </p>
+              <label>
+                Why are you removing them? (shown to them)
+                <textarea
+                  value={kickReason}
+                  onChange={(e) => setKickReason(e.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={300}
+                  placeholder="e.g. Repeated spam after a warning"
+                />
+              </label>
+              <button className="button danger" disabled={busy}>
+                Remove from room
+              </button>
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => {
+                  setModal(null);
+                  setKickTarget(null);
+                  setKickReason("");
+                }}
+              >
+                Keep them in the room
+              </button>
             </form>
           ) : (
             <form onSubmit={createRoom}>

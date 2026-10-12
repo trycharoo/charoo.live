@@ -345,4 +345,28 @@ describe("HTTP API", () => {
       (await f.db.prepare("SELECT * FROM audit_logs").all()).results,
     ).toHaveLength(1);
   });
+  it("lists users for staff search", async () => {
+    const f = await fixture(),
+      u = await f.guest(),
+      mod = await f.guest(true, "MODERATOR");
+    expect(
+      (await request(f, "/admin/users", "GET", undefined, u)).status,
+    ).toBe(403);
+    const all: any = await (
+      await request(f, "/admin/users", "GET", undefined, mod)
+    ).json();
+    expect(all.length).toBe(2);
+    expect(all.map((u: any) => u.role).sort()).toEqual(["MODERATOR", "USER"]);
+    const other = all.find((u: any) => u.role === "USER");
+    const filtered: any = await (
+      await request(
+        f,
+        `/admin/users?q=${encodeURIComponent(other.display_name)}`,
+        "GET",
+        undefined,
+        mod,
+      )
+    ).json();
+    expect(filtered.length).toBe(1);
+  });
 });

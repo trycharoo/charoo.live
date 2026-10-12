@@ -75,6 +75,22 @@ export function adminRoutes(app: Hono<HttpEnv>) {
       ),
     ),
   );
+  app.get("/api/admin/users", async (c) => {
+    const q = z
+      .object({
+        q: z.string().max(100).default(""),
+        limit: z.coerce.number().int().min(1).max(100).default(30),
+      })
+      .parse(c.req.query());
+    const like = `%${q.q.trim().toLowerCase()}%`;
+    return c.json(
+      await all(
+        c.env,
+        `SELECT id,display_name,email,verified,role,banned,suspended_until,created_at FROM users WHERE (?='' OR lower(display_name) LIKE ? OR lower(coalesce(email,'')) LIKE ?) ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+        [q.q.trim(), like, like, q.limit],
+      ),
+    );
+  });
   app.get("/api/admin/audit", async (c) => {
     requireThat(c.get("user").role === "ADMIN", 403, "Admin role required");
     return c.json(
