@@ -1,0 +1,92 @@
+{
+  "name": "celld-boilerplate",
+  "main": "./celld/index.ts",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/health"],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ROOM",
+        "class_name": "Room",
+      },
+      {
+        "name": "APP",
+        "class_name": "AppCoordinator",
+      },
+      {
+        "name": "MATCHER",
+        "class_name": "Matcher",
+      },
+      {
+        "name": "USER_HUB",
+        "class_name": "UserHub",
+      },
+      {
+        "name": "DISCOVERY",
+        "class_name": "Discovery",
+      },
+      {
+        "name": "RATE_LIMITER",
+        "class_name": "RateLimiter",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Room"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "AppCoordinator",
+        "Matcher",
+        "UserHub",
+        "Discovery",
+        "RateLimiter",
+      ],
+    },
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "charoo",
+      "migrations_dir": "celld/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "charoo-media",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "JOBS",
+        "queue": "charoo-jobs",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "charoo-jobs",
+        "max_batch_size": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "charoo-jobs-dead-letter",
+      },
+    ],
+  },
+  "triggers": {
+    "crons": ["* * * * *"],
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": ["**/*.sql"],
+    },
+  ],
+}

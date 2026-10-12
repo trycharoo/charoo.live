@@ -1,0 +1,53 @@
+{
+  "name": "celld-boilerplate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev:celld": "tsx celld/scripts/dev.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test",
+    "deploy": "pnpm build && tsx celld/scripts/deploy.ts",
+    "dev": "vite --host 127.0.0.1",
+    "build": "pnpm typecheck && vite build",
+    "test:browser": "playwright test",
+    "setup": "tsx celld/scripts/setup.ts",
+    "db:migrate": "tsx celld/scripts/migrate.ts",
+    "admin:grant": "tsx celld/scripts/admin.ts",
+    "test:native": "tsx celld/scripts/native-test.ts",
+    "test:visual": "tsx celld/scripts/visual.ts",
+    "format:check": "prettier --check celld tests *config.ts src/realtime.ts"
+  },
+  "dependencies": {
+    "@charoo/contracts": "workspace:*",
+    "@hono/standard-validator": "^0.4.0",
+    "hono": "^4.13.13",
+    "jose": "^6.1.0",
+    "livekit-client": "^2.15.6",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261005.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.4",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "dotenv": "^18.0.5",
+    "esbuild": "0.28.2",
+    "jsonc-parser": "^3.3.1",
+    "prettier": "3.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vite": "^7.1.12",
+    "vitest": "^5.0.3"
+  }
+}

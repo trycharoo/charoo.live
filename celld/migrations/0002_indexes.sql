@@ -1,0 +1,11 @@
+CREATE INDEX room_expiry ON room_index(state,expires_at,purge_at);
+CREATE INDEX room_creator ON room_index(creator_id,type,state);
+CREATE INDEX operation_recovery ON operations(state,created_at);
+CREATE INDEX outbox_delivery ON app_outbox(created_at,id);
+CREATE INDEX incoming_requests ON social_requests(target_id,state,expires_at);
+CREATE INDEX report_review ON reports(state,created_at DESC);
+CREATE INDEX audit_history ON audit_logs(created_at DESC);
+CREATE INDEX token_expiry ON email_tokens(expires_at);
+CREATE INDEX oauth_expiry ON oauth_flows(expires_at);
+CREATE INDEX session_expiry ON sessions(expires_at);
+CREATE INDEX guest_expiry ON users(verified,guest_expires_at);
