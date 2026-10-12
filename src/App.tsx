@@ -302,11 +302,13 @@ export function App() {
         api(`/rooms/${room.id}/messages`),
         api(`/rooms/${room.id}`),
       ]);
+      if (activeRef.current?.id !== room.id) return;
       setMessages(data.messages);
       setMessageNext(data.next);
       setActive(meta);
       await api(`/rooms/${room.id}/read`, "POST", {});
     } catch (e) {
+      if (activeRef.current?.id !== room.id) return;
       setActive(null);
       activeRef.current = null;
       notify((e as Error).message, true);
@@ -517,7 +519,9 @@ export function App() {
     }
     if (event.type === "read" && event.roomId === activeRef.current?.id)
       api(`/rooms/${event.roomId}/messages`)
-        .then((r) => setMessages(r.messages))
+        .then((r) => {
+          if (activeRef.current?.id === event.roomId) setMessages(r.messages);
+        })
         .catch(() => {});
     if (event.type === "matched")
       background(async () => {

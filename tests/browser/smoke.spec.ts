@@ -133,6 +133,65 @@ test("Google sign-in confirms the profile before entering the invited room", asy
   });
   await expect.poll(() => new URL(page.url()).hash).toBe("");
 });
+test("Back keeps the main navigation when a room refresh finishes late", async ({
+  page,
+  context,
+}) => {
+  await visualFixture(context);
+  await page.goto("/");
+  const roomResponse = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/rooms/${visualIds.group}`,
+  );
+  await page
+    .getByRole("button", { name: "Coffee with friends", exact: true })
+    .click();
+  const room = await (await roomResponse).json();
+  await expect(
+    page.getByRole("heading", { name: "Coffee with friends", exact: true }),
+  ).toBeVisible();
+
+  let startRefresh!: () => void;
+  let releaseRefresh!: () => void;
+  const refreshStarted = new Promise<void>((resolve) => {
+    startRefresh = resolve;
+  });
+  const refreshReleased = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  await page.route(`**/api/rooms/${visualIds.group}`, async (route) => {
+    startRefresh();
+    await refreshReleased;
+    await route.fulfill({ json: room });
+  });
+  try {
+    await page
+      .getByRole("button", { name: "Mute Milo Hart", exact: true })
+      .click();
+    await refreshStarted;
+    await page
+      .getByRole("button", { name: "Back to rooms", exact: true })
+      .click();
+    await expect(
+      page.getByRole("navigation", { name: "Main navigation", exact: true }),
+    ).toBeVisible();
+    releaseRefresh();
+    await expect(
+      page.getByText(
+        "Member muted for 30 minutes. Click Unmute to let them chat again.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Main navigation", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Room members", exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    releaseRefresh();
+  }
+});
 test("desktop guest creates an unlisted room, sends a message, and reloads the session", async ({
   page,
   browser,
