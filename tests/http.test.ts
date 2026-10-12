@@ -129,6 +129,59 @@ describe("HTTP API", () => {
       ).status,
     ).toBe(401);
   });
+  it("saves a guest's chosen nickname and optional private profile across requests", async () => {
+    const f = await fixture();
+    for (const details of [
+      { displayName: "  Coffee friend  ", age: 29, gender: "Female" },
+      { displayName: "Anonymous friend", age: null, gender: "" },
+    ]) {
+      const profile = {
+        ...details,
+        region: "",
+        bio: "",
+        interests: [],
+        aslVisibility: "private",
+      };
+      const created = await request(f, "/auth/guest", "POST", {
+        communityConsent: true,
+        profile,
+      });
+      expect(created.status).toBe(201);
+      const expected = { ...profile, displayName: details.displayName.trim() };
+      expect(await created.json()).toMatchObject({
+        user: { displayName: expected.displayName, profile: expected },
+      });
+      const cookie = created.headers.get("set-cookie")!.split(";")[0];
+      const reloaded = await request(f, "/me", "GET", undefined, undefined, {
+        Cookie: cookie,
+      });
+      expect(reloaded.status).toBe(200);
+      expect(await reloaded.json()).toMatchObject({
+        user: { displayName: expected.displayName, profile: expected },
+      });
+    }
+    for (const details of [
+      { displayName: "  ", age: null, gender: "" },
+      { displayName: "Friend", age: 17, gender: "" },
+      { displayName: "Friend", age: 29.5, gender: "" },
+      { displayName: "Friend", age: 121, gender: "" },
+    ]) {
+      expect(
+        (
+          await request(f, "/auth/guest", "POST", {
+            communityConsent: true,
+            profile: {
+              ...details,
+              region: "",
+              bio: "",
+              interests: [],
+              aslVisibility: "private",
+            },
+          })
+        ).status,
+      ).toBe(400);
+    }
+  });
   it("preserves REST room, history and duplicate message responses", async () => {
     const f = await fixture(),
       u = await f.guest();

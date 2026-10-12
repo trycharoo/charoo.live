@@ -22,6 +22,8 @@ pnpm dev
 
 Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly, including its port and without a trailing slash. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
 
+Room invitation links open the join dialog automatically. Recipients can continue as guests or sign in with Google/email, then enter the invited room using their chosen nickname. Nickname is required; age and sex are optional. New guests keep these details private by default, and returning users retain their profile visibility setting. Google and email returns preserve the invitation until the recipient confirms their profile.
+
 The development wrapper excludes test artifacts, `.context`, docs and Vite source files from Celld’s native watcher; backend/config/build changes still rebuild the Worker. Vite owns frontend source updates.
 
 Celld preserves its local state in `.celld/dev`. Development initializes the same SQL migrations used in production and records them in `d1_migrations`. Existing demo Room storage remains isolated: application rooms use `charoo:<uuid>` and SQLite tables beginning with `charoo_`.

@@ -34,7 +34,9 @@ const communityConsentSchema = z.union([
   // Keep existing clients working while the app switches to community consent.
   z.object({ adultConsent: z.literal(true) }),
 ]);
-export const guestSchema = communityConsentSchema;
+export const guestSchema = z
+  .object({ profile: profileSchema.optional() })
+  .and(communityConsentSchema);
 export const emailSchema = z
   .object({
     email: z.string().email().max(254),

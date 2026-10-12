@@ -42,6 +42,7 @@ import {
   type Room,
   type Message,
   type Settings as AppSettings,
+  type Profile,
 } from "@charoo/contracts";
 import { api, setCsrf, getCsrf } from "./api";
 const VideoCall = lazy(() =>
@@ -90,6 +91,68 @@ function Modal({
 }
 const field = (form: HTMLFormElement, name: string) =>
   String(new FormData(form).get(name) || "");
+const profileFromForm = (
+  form: HTMLFormElement,
+  previous?: Profile,
+): Profile => ({
+  region: "",
+  bio: "",
+  interests: [],
+  aslVisibility: "private",
+  ...previous,
+  displayName: field(form, "displayName").trim(),
+  age: field(form, "age") ? Number(field(form, "age")) : null,
+  gender: field(form, "gender"),
+});
+function JoinProfileFields({ profile }: { profile?: Profile }) {
+  const sexes = ["Male", "Female", "Other"];
+  return (
+    <>
+      <label>
+        Nickname
+        <input
+          name="displayName"
+          required
+          minLength={2}
+          maxLength={40}
+          autoComplete="nickname"
+          placeholder="What should we call you?"
+          defaultValue={profile?.displayName || ""}
+        />
+      </label>
+      <div className="form-grid">
+        <label>
+          Age (optional)
+          <input
+            type="number"
+            name="age"
+            min={18}
+            max={120}
+            step={1}
+            placeholder="Optional"
+            defaultValue={profile?.age ?? ""}
+          />
+        </label>
+        <label>
+          Sex (optional)
+          <select
+            name="gender"
+            aria-label="Sex (optional)"
+            defaultValue={profile?.gender || ""}
+          >
+            <option value="">Prefer not to say</option>
+            {profile?.gender && !sexes.includes(profile.gender) && (
+              <option value={profile.gender}>{profile.gender}</option>
+            )}
+            {sexes.map((sex) => (
+              <option key={sex}>{sex}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </>
+  );
+}
 export function App() {
   const bootstrapped = useRef(false);
   const [user, setUser] = useState<User | null>(null),
@@ -106,6 +169,9 @@ export function App() {
     [status, setStatus] = useState("Online"),
     [queue, setQueue] = useState(false),
     [modal, setModal] = useState<string | null>(null),
+    [joinProfilePending, setJoinProfilePending] = useState(() =>
+      Boolean(new URLSearchParams(location.hash.slice(1)).get("room")),
+    ),
     [toast, setToast] = useState(""),
     [error, setError] = useState(false),
     [search, setSearch] = useState(""),
@@ -263,12 +329,26 @@ export function App() {
     if (userRef.current?.role === "ADMIN") setAudit(await api("/admin/audit"));
   }
   async function joinShared() {
+    if (joinProfilePending) return;
     const t = new URLSearchParams(location.hash.slice(1)).get("room");
     if (t) {
-      const room = await api("/shared/join", "POST", { token: t });
-      location.hash = "";
-      await openRoom(room.id);
-      await loadSocial();
+      try {
+        const room = await api("/shared/join", "POST", { token: t });
+        await openRoom(room.id);
+        await loadSocial();
+        const params = new URLSearchParams(location.hash.slice(1));
+        if (params.get("room") === t) {
+          params.delete("room");
+          window.history.replaceState(
+            null,
+            "",
+            `${location.pathname}${location.search}${params.size ? `#${params}` : ""}`,
+          );
+        }
+      } catch (e) {
+        setJoinProfilePending(true);
+        throw e;
+      }
     }
   }
   useEffect(() => {
@@ -330,6 +410,7 @@ export function App() {
             notify("Email verified. Welcome to Charoo.");
           }
           await me();
+          if (params.has("room")) setModal("joinProfile");
           if (
             googleResult === "google" &&
             createAfterSignIn &&
@@ -339,6 +420,8 @@ export function App() {
         } catch (e) {
           if (!String((e as Error).message).includes("Sign in"))
             notify((e as Error).message, true);
+          if (new URLSearchParams(location.hash.slice(1)).has("room"))
+            setModal("guest");
         } finally {
           setLoading(false);
         }
@@ -350,6 +433,16 @@ export function App() {
     };
     window.addEventListener("beforeinstallprompt", listener);
     return () => window.removeEventListener("beforeinstallprompt", listener);
+  }, []);
+  useEffect(() => {
+    const invitationChanged = () => {
+      if (!new URLSearchParams(location.hash.slice(1)).get("room")) return;
+      setJoinProfilePending(true);
+      setCreateAfterGuest(false);
+      setModal(userRef.current ? "joinProfile" : "guest");
+    };
+    window.addEventListener("hashchange", invitationChanged);
+    return () => window.removeEventListener("hashchange", invitationChanged);
   }, []);
   useEffect(() => {
     if (toast) {
@@ -366,7 +459,7 @@ export function App() {
     return () => window.removeEventListener("keydown", closeMenu);
   }, [mobileNav]);
   useEffect(() => {
-    if (!user) return;
+    if (!user || loading) return;
     act(async () => {
       await heartbeat();
       await loadSocial();
@@ -377,7 +470,7 @@ export function App() {
       25000,
     );
     return () => clearInterval(t);
-  }, [user?.id]);
+  }, [user?.id, loading, joinProfilePending]);
   useEffect(() => {
     if (!user?.verified || page !== "tonight") return;
     const t = setTimeout(() => act(() => loadRooms()), 250);
@@ -534,14 +627,33 @@ export function App() {
   }, [messages.length]);
   async function startGuest(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
     await act(async () => {
       const value = await api("/auth/guest", "POST", {
         communityConsent: true,
+        profile: profileFromForm(form),
       });
       setCsrf(value.csrf);
       setUser(value.user);
-      setModal(createAfterGuest ? "shared" : null);
+      userRef.current = value.user;
+      setJoinProfilePending(false);
+      setModal(createAfterGuest && !hasRoomInvite ? "shared" : null);
       setCreateAfterGuest(false);
+    });
+  }
+  async function completeJoinProfile(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    await act(async () => {
+      const value = await api(
+        "/me/profile",
+        "PATCH",
+        profileFromForm(form, userRef.current?.profile),
+      );
+      setUser(value);
+      userRef.current = value;
+      setModal(null);
+      setJoinProfilePending(false);
     });
   }
   async function email(e: FormEvent<HTMLFormElement>) {
@@ -910,13 +1022,13 @@ export function App() {
                 <button
                   className="button"
                   onClick={
-                    hasRoomInvite && !user
-                      ? () => setModal("guest")
+                    hasRoomInvite
+                      ? () => setModal(user ? "joinProfile" : "guest")
                       : startSharedRoom
                   }
                 >
                   <Plus size={18} />
-                  {hasRoomInvite && !user ? "Join this room" : "Start a room"}
+                  {hasRoomInvite ? "Join this room" : "Start a room"}
                 </button>
                 <span>You host. You moderate. The room expires.</span>
               </div>
@@ -1412,9 +1524,7 @@ export function App() {
                     const f = e.currentTarget;
                     act(async () => {
                       const r = await api("/me/profile", "PATCH", {
-                        displayName: field(f, "displayName"),
-                        age: user.profile.age,
-                        gender: user.profile.gender,
+                        ...profileFromForm(f, user.profile),
                         region: field(f, "region"),
                         bio: field(f, "bio"),
                         interests: field(f, "interests")
@@ -1428,16 +1538,7 @@ export function App() {
                     });
                   }}
                 >
-                  <label>
-                    Display name
-                    <input
-                      name="displayName"
-                      required
-                      minLength={2}
-                      maxLength={40}
-                      defaultValue={user.profile.displayName}
-                    />
-                  </label>
+                  <JoinProfileFields profile={user.profile} />
                   <label>
                     Approximate region
                     <input
@@ -2296,17 +2397,19 @@ export function App() {
                 : "A room starts with you"
               : modal === "email"
                 ? "Sign in to Charoo"
-                : modal === "share"
-                  ? "Your room is ready"
-                  : modal === "invite"
-                    ? "Invite people to your room"
-                    : modal === "report"
-                      ? "Help keep Charoo safe"
-                      : modal === "editRoom"
-                        ? "Your room, your topic"
-                        : modal === "public"
-                          ? "Start a public conversation"
-                          : "Create your room"
+                : modal === "joinProfile"
+                  ? "Join this room"
+                  : modal === "share"
+                    ? "Your room is ready"
+                    : modal === "invite"
+                      ? "Invite people to your room"
+                      : modal === "report"
+                        ? "Help keep Charoo safe"
+                        : modal === "editRoom"
+                          ? "Your room, your topic"
+                          : modal === "public"
+                            ? "Start a public conversation"
+                            : "Create your room"
           }
           onClose={() => {
             setModal(null);
@@ -2337,8 +2440,14 @@ export function App() {
           {modal === "guest" ? (
             <form onSubmit={startGuest}>
               <p>
-                Create or join a room with a temporary guest name. You can add
-                your email later to keep your identity.
+                {hasRoomInvite
+                  ? "Choose a nickname to join the invited room. You can sign in with Google or email to keep your identity."
+                  : "Choose a nickname for your temporary guest identity. You can add your email later to keep it."}
+              </p>
+              <JoinProfileFields />
+              <p className="form-note">
+                Age and sex are optional and stay private unless you change your
+                profile visibility.
               </p>
               <label className="checkbox">
                 <input type="checkbox" required />I agree to be respectful and
@@ -2353,6 +2462,17 @@ export function App() {
                 onClick={() => setModal("email")}
               >
                 Sign in with email instead
+              </button>
+            </form>
+          ) : modal === "joinProfile" ? (
+            <form onSubmit={completeJoinProfile}>
+              <p>
+                Confirm your nickname before entering the invited room. Age and
+                sex are optional and follow your profile visibility setting.
+              </p>
+              <JoinProfileFields profile={user?.profile} />
+              <button className="button" disabled={busy}>
+                Join room <ArrowRight size={16} />
               </button>
             </form>
           ) : modal === "email" ? (
@@ -2377,6 +2497,15 @@ export function App() {
               <button className="button" disabled={busy}>
                 Send my sign-in link <ArrowRight size={16} />
               </button>
+              {!user && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setModal("guest")}
+                >
+                  Continue as guest instead
+                </button>
+              )}
             </form>
           ) : ["share", "invite"].includes(modal) ? (
             <>

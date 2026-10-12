@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { defaultSettings, type Profile, type User } from "@charoo/contracts";
+import { visualFixture, visualIds } from "./visual-fixture";
 test("Google sign-in preserves the room invitation when the user cancels", async ({
   page,
   baseURL,
@@ -17,9 +19,7 @@ test("Google sign-in preserves the room invitation when the user cancels", async
     });
   });
   await page.goto(`/#room=${roomToken}`);
-  await page
-    .getByRole("button", { name: "Join this room", exact: true })
-    .click();
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page
     .getByRole("button", { name: "Continue with Google", exact: true })
     .click();
@@ -36,6 +36,103 @@ test("Google sign-in preserves the room invitation when the user cancels", async
     page.getByRole("button", { name: "Join this room", exact: true }),
   ).toBeVisible();
 });
+test("Google sign-in confirms the profile before entering the invited room", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  await visualFixture(context);
+  const roomToken = "b".repeat(43);
+  let signedIn = false;
+  let savedProfile: Profile | undefined;
+  let joinedToken: string | undefined;
+  let account: User = {
+    id: visualIds.user,
+    displayName: "Google name",
+    verified: true,
+    role: "USER",
+    status: "Online",
+    profile: {
+      displayName: "Google name",
+      age: null,
+      gender: "",
+      region: "Manila",
+      bio: "Keep this bio",
+      interests: ["Coffee"],
+      aslVisibility: "private",
+    },
+  };
+  await page.route("**/api/me", (route) =>
+    route.fulfill(
+      signedIn
+        ? {
+            json: {
+              user: account,
+              csrf: "fixture-csrf",
+              settings: defaultSettings,
+            },
+          }
+        : { status: 401, json: { error: "Sign in to continue" } },
+    ),
+  );
+  await page.route("**/api/auth/google", (route) => {
+    expect(route.request().postDataJSON().roomToken).toBe(roomToken);
+    signedIn = true;
+    return route.fulfill({
+      json: {
+        url: `${baseURL}/?google_callback=1#room=${roomToken}&auth=google`,
+      },
+    });
+  });
+  await page.route("**/api/me/profile", (route) => {
+    savedProfile = route.request().postDataJSON();
+    account = {
+      ...account,
+      displayName: savedProfile!.displayName,
+      profile: savedProfile!,
+    };
+    return route.fulfill({ json: account });
+  });
+  await page.route("**/api/shared/join", (route) => {
+    joinedToken = route.request().postDataJSON().token;
+    return route.fulfill({ json: { id: visualIds.group } });
+  });
+  await page.goto(`/#room=${roomToken}`);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Continue with Google", exact: true })
+    .click();
+  await expect(page.getByLabel("Nickname", { exact: true })).toHaveValue(
+    "Google name",
+  );
+  expect(joinedToken).toBeUndefined();
+  // Reloading before profile confirmation must keep the invitation and the join step.
+  await page.reload();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(joinedToken).toBeUndefined();
+  await page.getByLabel("Nickname", { exact: true }).fill("Room nickname");
+  await page.getByLabel("Age (optional)", { exact: true }).fill("31");
+  await page
+    .getByLabel("Sex (optional)", { exact: true })
+    .selectOption("Other");
+  await page.getByRole("button", { name: "Join room", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Coffee with friends", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(joinedToken).toBe(roomToken);
+  expect(savedProfile).toEqual({
+    ...account.profile,
+    displayName: "Room nickname",
+    age: 31,
+    gender: "Other",
+    region: "Manila",
+    bio: "Keep this bio",
+    interests: ["Coffee"],
+    aslVisibility: "private",
+  });
+  await expect.poll(() => new URL(page.url()).hash).toBe("");
+});
 test("desktop guest creates an unlisted room, sends a message, and reloads the session", async ({
   page,
   browser,
@@ -48,6 +145,11 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
   ).toBeVisible();
   await expect(page.locator("body")).not.toContainText("18+");
   await page.getByRole("button", { name: "Start a room", exact: true }).click();
+  await page.getByLabel("Nickname", { exact: true }).fill("Coffee host");
+  await page.getByLabel("Age (optional)", { exact: true }).fill("29");
+  await page
+    .getByLabel("Sex (optional)", { exact: true })
+    .selectOption("Other");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue as guest" }).click();
   await expect(page.getByText("Guest · temporary identity")).toBeVisible();
@@ -100,9 +202,10 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
   try {
     const guestPage = await guestContext.newPage();
     await guestPage.goto(inviteUrl);
+    await expect(guestPage.getByRole("dialog")).toBeVisible();
     await guestPage
-      .getByRole("button", { name: "Join this room", exact: true })
-      .click();
+      .getByLabel("Nickname", { exact: true })
+      .fill("Coffee guest");
     await guestPage.getByRole("checkbox").check();
     await guestPage.getByRole("button", { name: "Continue as guest" }).click();
     await expect(
@@ -128,11 +231,24 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
         exact: true,
       }),
     ).toHaveCount(0);
+    const guest = await (
+      await guestPage.request.get(`${new URL(inviteUrl).origin}/api/me`)
+    ).json();
+    expect(guest.user).toMatchObject({
+      displayName: "Coffee guest",
+      profile: { age: null, gender: "", aslVisibility: "private" },
+    });
+    await expect.poll(() => new URL(guestPage.url()).hash).toBe("");
   } finally {
     await guestContext.close();
   }
   await page.reload();
   await expect(page.getByText("Guest · temporary identity")).toBeVisible();
+  const host = await (await page.request.get("/api/me")).json();
+  expect(host.user).toMatchObject({
+    displayName: "Coffee host",
+    profile: { age: 29, gender: "Other", aslVisibility: "private" },
+  });
   await page
     .getByRole("button", { name: "Browser test coffee room", exact: true })
     .click();
@@ -170,6 +286,7 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   await page.getByRole("button", { name: "Quick chat", exact: true }).click();
   await page.getByRole("button", { name: "Meet someone", exact: true }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByLabel("Nickname", { exact: true }).fill("Mobile host");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

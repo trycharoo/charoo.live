@@ -200,15 +200,21 @@ test("email sign-in returns to the invited room in the browser", async ({
     expect(new URL(link).hash).toContain(`room=${roomToken}`);
     const page = await guest.context.newPage();
     await page.goto(link);
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page
+      .getByLabel("Nickname", { exact: true })
+      .fill("Email room friend");
+    await page.getByRole("button", { name: "Join room", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Email invitation room", exact: true }),
     ).toBeVisible();
     await expect(page.locator(".messages")).toBeVisible();
-    expect(new URL(page.url()).hash).toBe("");
+    await expect.poll(() => new URL(page.url()).hash).toBe("");
     const me = await (await guest.context.request.get(`${base}/api/me`)).json();
     expect(me.user).toMatchObject({
       id: guest.session.user.id,
       verified: true,
+      displayName: "Email room friend",
     });
   } finally {
     await host.context.close();

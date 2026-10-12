@@ -51,7 +51,7 @@ export class AppCoordinator extends DurableObject<Env> {
           actor && kind !== "verify" ? await authenticate(env, actor) : null;
         switch (kind) {
           case "guest": {
-            guestSchema.parse(input);
+            const b = guestSchema.parse(input);
             requireThat(
               (await settings(env)).guest_access_enabled,
               403,
@@ -67,14 +67,14 @@ export class AppCoordinator extends DurableObject<Env> {
                 ))!.csrf,
               };
             const id = crypto.randomUUID(),
-              name = `Guest ${token().slice(0, 4)}`;
+              name = b.profile?.displayName || `Guest ${token().slice(0, 4)}`;
             await run(
               env,
               "INSERT INTO users(id,display_name,profile,created_at,guest_expires_at) VALUES(?,?,?,?,?)",
               [
                 id,
                 name,
-                JSON.stringify(emptyProfile(name)),
+                JSON.stringify(b.profile || emptyProfile(name)),
                 iso(),
                 iso(Date.now() + 604800000),
               ],
