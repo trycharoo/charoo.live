@@ -11,6 +11,7 @@ import {
   sessionCookie,
   oauthCookie,
   rate,
+  trustedOrigin,
   type HttpEnv,
 } from "../../http/context";
 import { authorizationUrl, exchange } from "./google";
@@ -52,7 +53,16 @@ export function authRoutes(app: Hono<HttpEnv>) {
     );
     const fragment = new URLSearchParams({ verify: value.token });
     if (value.roomToken) fragment.set("room", value.roomToken);
-    await mail(c.env, value.email, `${c.env.WEB_ORIGIN}/#${fragment}`);
+    const origin = c.req.header("Origin");
+    const returnOrigin =
+      c.env.ADMIN_ORIGIN &&
+      trustedOrigin(
+        { WEB_ORIGIN: c.env.ADMIN_ORIGIN, NODE_ENV: c.env.NODE_ENV },
+        origin,
+      )
+        ? origin!
+        : c.env.WEB_ORIGIN;
+    await mail(c.env, value.email, `${returnOrigin}/#${fragment}`);
     return c.json({
       message: "Check your email for a sign-in link. It expires in 15 minutes.",
     });

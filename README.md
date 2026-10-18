@@ -61,6 +61,11 @@ Use `pnpm run deploy` explicitly: pnpm also has its own unrelated `deploy` subco
 
 `ADMIN_NO_AUTH=true` enables admin tools without a staff session in development only. Keep the API on a trusted network; this mode bypasses browser origin checks for admin endpoints, while signed-in sessions still require CSRF tokens. Production always requires staff authentication.
 
+For a separate staff dashboard, set `ADMIN_ORIGIN=http://127.0.0.1:5179` alongside
+the chat UI's `WEB_ORIGIN`. Both configured origins are trusted; staff roles and
+CSRF checks still apply. Email links requested from the admin origin return to
+that dashboard.
+
 The templates leave optional provider groups commented out. Uncomment and fill a complete group when enabling Google, Resend, scanning, video or AI. These integrations still use their credentials in the Celld implementation.
 
 When carrying an environment file over from the original application, remove the obsolete application settings:
