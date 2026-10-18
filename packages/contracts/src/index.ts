@@ -175,6 +175,7 @@ export const defaultSettings = {
   available_room_media_enabled: false,
   video_enabled: false,
   AI_assistant_enabled: false,
+  quickchat_rematch_cooldown_minutes: 5,
   reconnect_price: 0,
 };
 export const settingsSchema = z.object({
@@ -193,6 +194,7 @@ export const settingsSchema = z.object({
   available_room_media_enabled: z.boolean(),
   video_enabled: z.boolean(),
   AI_assistant_enabled: z.boolean(),
+  quickchat_rematch_cooldown_minutes: z.number().int().min(0).max(1440),
   reconnect_price: z.literal(0),
 });
 export type Settings = typeof defaultSettings;

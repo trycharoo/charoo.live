@@ -858,15 +858,18 @@ export class AppCoordinator extends DurableObject<Env> {
         );
         requireThat(!existing, 409, "Already matched");
         const [x, y] = [a, b].sort();
-        requireThat(
-          !(await first(
-            env,
-            "SELECT 1 FROM match_history WHERE user_a=? AND user_b=? AND matched_at>?",
-            [x, y, iso(Date.now() - 1800000)],
-          )),
-          409,
-          "Recent match",
-        );
+        const rematchCooldownMs =
+          (cfg.quickchat_rematch_cooldown_minutes ?? 5) * 60000;
+        if (rematchCooldownMs > 0)
+          requireThat(
+            !(await first(
+              env,
+              "SELECT 1 FROM match_history WHERE user_a=? AND user_b=? AND matched_at>?",
+              [x, y, iso(Date.now() - rematchCooldownMs)],
+            )),
+            409,
+            "Recent match",
+          );
         const id = crypto.randomUUID(),
           record = this.roomRecord(id, "STRANGER", a),
           op = `match:${id}`,
