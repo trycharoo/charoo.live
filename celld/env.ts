@@ -6,6 +6,7 @@ export const workerEnvironment = {
   required: ["WEB_ORIGIN", "MESSAGE_KEY"] as const,
   optional: [
     "NODE_ENV",
+    "ADMIN_ORIGIN",
     "EMAIL_FROM",
     "RESEND_API_KEY",
     "MAILPIT_URL",
@@ -61,6 +62,7 @@ type DiscoveryClient = Pick<Discovery, "notify" | "fetch">;
 type RateClient = Pick<RateLimiter, "limit">;
 export interface Env {
   WEB_ORIGIN: string;
+  ADMIN_ORIGIN?: string;
   MESSAGE_KEY: string;
   NODE_ENV?: string;
   EMAIL_FROM?: string;

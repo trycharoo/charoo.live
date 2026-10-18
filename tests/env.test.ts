@@ -59,4 +59,29 @@ describe("Worker environment", () => {
     );
     expect(() => serializeDevVars({ MESSAGE_KEY: "a\nb" })).toThrow();
   });
+  it("validates and exposes the separate admin origin", () => {
+    expect(
+      selectWorkerEnvironment({
+        ...required,
+        ADMIN_ORIGIN: "https://admin.example",
+      }),
+    ).toMatchObject({ ADMIN_ORIGIN: "https://admin.example" });
+    for (const ADMIN_ORIGIN of [
+      "https://admin.example/",
+      "https://admin.example/path",
+      "https://admin.example?token=x",
+      "ftp://admin.example",
+    ]) {
+      expect(() =>
+        selectWorkerEnvironment({ ...required, ADMIN_ORIGIN }),
+      ).toThrow();
+    }
+    expect(() =>
+      selectWorkerEnvironment({
+        ...required,
+        NODE_ENV: "production",
+        ADMIN_ORIGIN: "http://127.0.0.1:5179",
+      }),
+    ).toThrow("Production ADMIN_ORIGIN must use HTTPS");
+  });
 });

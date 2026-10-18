@@ -39,23 +39,28 @@ export const uuid = (value: string | undefined) =>
 // http://127.0.0.1:5173, but browsers treat them as different origins.
 // Outside production, accept the twin so either URL works.
 export function trustedOrigin(
-  env: Pick<Env, "WEB_ORIGIN" | "NODE_ENV">,
+  env: Pick<Env, "WEB_ORIGIN" | "ADMIN_ORIGIN" | "NODE_ENV">,
   origin: string | undefined | null,
 ): boolean {
   if (!origin) return false;
-  if (origin === env.WEB_ORIGIN) return true;
+  const configuredOrigins = [env.WEB_ORIGIN, env.ADMIN_ORIGIN].filter(
+    (value): value is string => !!value,
+  );
+  if (configuredOrigins.includes(origin)) return true;
   if (env.NODE_ENV === "production") return false;
   try {
     const a = new URL(origin),
-      b = new URL(env.WEB_ORIGIN),
       loopbacks = new Set(["localhost", "127.0.0.1"]);
-    return (
-      a.protocol === b.protocol &&
-      a.port === b.port &&
-      a.hostname !== b.hostname &&
-      loopbacks.has(a.hostname) &&
-      loopbacks.has(b.hostname)
-    );
+    return configuredOrigins.some((configured) => {
+      const b = new URL(configured);
+      return (
+        a.protocol === b.protocol &&
+        a.port === b.port &&
+        a.hostname !== b.hostname &&
+        loopbacks.has(a.hostname) &&
+        loopbacks.has(b.hostname)
+      );
+    });
   } catch {
     return false;
   }

@@ -50,14 +50,19 @@ export function selectWorkerEnvironment(
     );
   }
 
-  const origin = new URL(selected.WEB_ORIGIN!);
-  if (
-    origin.origin !== selected.WEB_ORIGIN ||
-    !["http:", "https:"].includes(origin.protocol)
-  )
-    throw new Error(
-      "WEB_ORIGIN must be an HTTP origin without a trailing slash",
-    );
+  for (const name of ["WEB_ORIGIN", "ADMIN_ORIGIN"] as const) {
+    if (!selected[name]) continue;
+    const origin = new URL(selected[name]);
+    if (
+      origin.origin !== selected[name] ||
+      !["http:", "https:"].includes(origin.protocol)
+    )
+      throw new Error(
+        `${name} must be an HTTP origin without a trailing slash`,
+      );
+    if (selected.NODE_ENV === "production" && origin.protocol !== "https:")
+      throw new Error(`Production ${name} must use HTTPS`);
+  }
   if (
     !/^[A-Za-z0-9+/]{43}=$/.test(selected.MESSAGE_KEY!) ||
     Buffer.from(selected.MESSAGE_KEY!, "base64").length !== 32 ||
@@ -65,8 +70,6 @@ export function selectWorkerEnvironment(
       selected.MESSAGE_KEY
   )
     throw new Error("MESSAGE_KEY must be a base64 encoded 32-byte secret");
-  if (selected.NODE_ENV === "production" && origin.protocol !== "https:")
-    throw new Error("Production WEB_ORIGIN must use HTTPS");
   for (const group of [
     ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
     ["MEDIA_SCANNER_URL", "MEDIA_SCANNER_TOKEN"],
