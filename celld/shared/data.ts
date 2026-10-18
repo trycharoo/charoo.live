@@ -212,14 +212,14 @@ export const emptyProfile = (name: string): Profile => ({
   interests: [],
   aslVisibility: "private",
 });
-export async function audit(
+export function auditStatement(
   env: Env,
   actor: string,
   action: string,
   target: string,
   details: unknown = {},
 ) {
-  await run(
+  return stmt(
     env,
     "INSERT INTO audit_logs(id,actor_id,action,target_id,details,created_at) VALUES(?,?,?,?,?,?)",
     [
@@ -231,4 +231,14 @@ export async function audit(
       iso(),
     ],
   );
+}
+
+export async function audit(
+  env: Env,
+  actor: string,
+  action: string,
+  target: string,
+  details: unknown = {},
+) {
+  await auditStatement(env, actor, action, target, details).run();
 }

@@ -64,7 +64,9 @@ Use `pnpm run deploy` explicitly: pnpm also has its own unrelated `deploy` subco
 For a separate staff dashboard, set `ADMIN_ORIGIN=http://127.0.0.1:5179` alongside
 the chat UI's `WEB_ORIGIN`. Both configured origins are trusted; staff roles and
 CSRF checks still apply. Email links requested from the admin origin return to
-that dashboard.
+that dashboard. Staff email/Google sign-ins and sign-outs are audited, and settings
+updates record the changed values before and after saving. Authentication tokens
+and CSRF values are excluded from audit metadata.
 
 The templates leave optional provider groups commented out. Uncomment and fill a complete group when enabling Google, Resend, scanning, video or AI. These integrations still use their credentials in the Celld implementation.
 

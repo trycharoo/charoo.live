@@ -23,6 +23,7 @@ import {
   roomStub,
   publicUser,
   audit,
+  auditStatement,
   type Actor,
   type RoomRecord,
 } from "../shared/data";
@@ -139,7 +140,9 @@ export class AppCoordinator extends DurableObject<Env> {
                 "Sign out before verifying a different email",
               );
             const id = existing?.id || v.user_id;
-            await user(env, id, { allowExpiredGuest: !existing });
+            const signedInAccount = await user(env, id, {
+              allowExpiredGuest: !existing,
+            });
             const t = token(),
               csrf = token(),
               sh = await hash(t);
@@ -168,6 +171,13 @@ export class AppCoordinator extends DurableObject<Env> {
                 [sh, id, csrf, iso(Date.now() + 604800000)],
               ),
             );
+            if (signedInAccount.role !== "USER")
+              writes.push(
+                auditStatement(env, id, "staff.sign_in", id, {
+                  method: "email",
+                  role: signedInAccount.role,
+                }),
+              );
             await env.DB.batch(writes);
             return { user: publicUser(await user(env, id)), csrf, token: t };
           }
@@ -284,11 +294,7 @@ export class AppCoordinator extends DurableObject<Env> {
               );
               await env.DB.batch(writes);
             }
-            if (actor)
-              await run(env, "DELETE FROM sessions WHERE token_hash=?", [
-                actor.sessionHash,
-              ]);
-            return this.issue(id);
+            return this.issue(id, "google", actor?.sessionHash);
           }
           case "logout": {
             requireThat(u, 401, "Sign in to continue");
@@ -299,6 +305,13 @@ export class AppCoordinator extends DurableObject<Env> {
                 stmt(env, "DELETE FROM sessions WHERE token_hash=?", [
                   actor!.sessionHash,
                 ]),
+                ...(u.role !== "USER"
+                  ? [
+                      auditStatement(env, u.id, "staff.sign_out", u.id, {
+                        role: u.role,
+                      }),
+                    ]
+                  : []),
               ],
             );
             return null;
@@ -619,22 +632,28 @@ export class AppCoordinator extends DurableObject<Env> {
           case "settings": {
             requireThat(u?.role === "ADMIN", 403, "Admin role required");
             const b = settingsSchema.parse(input);
+            const previous = await settings(env);
+            const changes = Object.fromEntries(
+              Object.entries(b)
+                .filter(
+                  ([key, value]) =>
+                    previous[key as keyof typeof previous] !== value,
+                )
+                .map(([key, value]) => [
+                  key,
+                  {
+                    before: previous[key as keyof typeof previous],
+                    after: value,
+                  },
+                ]),
+            );
             await env.DB.batch([
               stmt(env, "UPDATE settings SET value=? WHERE id=1", [
                 JSON.stringify(b),
               ]),
-              stmt(
-                env,
-                "INSERT INTO audit_logs(id,actor_id,action,target_id,details,created_at) VALUES(?,?,?,?,?,?)",
-                [
-                  crypto.randomUUID(),
-                  u.id,
-                  "settings.update",
-                  "settings",
-                  "{}",
-                  iso(),
-                ],
-              ),
+              auditStatement(env, u.id, "settings.update", "settings", {
+                changes,
+              }),
             ]);
             return b;
           }
@@ -711,15 +730,36 @@ export class AppCoordinator extends DurableObject<Env> {
       }),
     );
   }
-  private async issue(id: string) {
+  private async issue(
+    id: string,
+    method?: "google",
+    previousSessionHash?: string,
+  ) {
     const t = token(),
-      csrf = token();
-    await run(
-      this.env,
-      "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES(?,?,?,?)",
-      [await hash(t), id, csrf, iso(Date.now() + 604800000)],
-    );
-    return { user: publicUser(await user(this.env, id)), csrf, token: t };
+      csrf = token(),
+      signedInAccount = await user(this.env, id);
+    const writes = [
+      stmt(
+        this.env,
+        "INSERT INTO sessions(token_hash,user_id,csrf,expires_at) VALUES(?,?,?,?)",
+        [await hash(t), id, csrf, iso(Date.now() + 604800000)],
+      ),
+    ];
+    if (previousSessionHash)
+      writes.push(
+        stmt(this.env, "DELETE FROM sessions WHERE token_hash=?", [
+          previousSessionHash,
+        ]),
+      );
+    if (method && signedInAccount.role !== "USER")
+      writes.push(
+        auditStatement(this.env, id, "staff.sign_in", id, {
+          method,
+          role: signedInAccount.role,
+        }),
+      );
+    await this.env.DB.batch(writes);
+    return { user: publicUser(signedInAccount), csrf, token: t };
   }
   private roomRecord(
     id: string,
