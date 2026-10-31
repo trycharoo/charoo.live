@@ -309,7 +309,7 @@ export function App() {
       api("/conversations"),
       api("/requests"),
       api("/contacts"),
-      userRef.current?.verified ? api("/reconnect") : Promise.resolve([]),
+      api("/quick-chat-history"),
       api("/blocks"),
       api("/calls"),
     ]);
@@ -1109,7 +1109,7 @@ export function App() {
       const room = activeRef.current;
       if (!room || room.type !== "STRANGER") return;
       try {
-        await api(`/rooms/${room.id}/leave`, "POST", {});
+        await api(`/rooms/${room.id}/leave`, "POST", { next: true });
       } catch {}
       if (ws.current?.readyState === 1)
         try {

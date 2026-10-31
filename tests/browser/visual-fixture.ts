@@ -120,12 +120,16 @@ export async function visualFixture(context: BrowserContext, signedIn = true) {
       response = [
         { id: visualIds.peer, room_id: contact.id, display_name: "Milo Hart" },
       ];
-    else if (path === "/api/reconnect")
+    else if (path === "/api/quick-chat-history")
       response = [
         {
+          archive_id: "20000000-0000-4000-8000-000000000004",
           id: visualIds.peer,
           display_name: "Milo Hart",
-          matched_at: common.created_at,
+          last_chatted_at: common.last_activity,
+          archived_at: common.last_activity,
+          expires_at: "2026-11-01T08:10:00.000Z",
+          reconnectable: true,
         },
       ];
     else if (path === "/api/blocks" || path === "/api/calls") response = [];

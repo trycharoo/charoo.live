@@ -4,6 +4,7 @@ import { messageSchema, z } from "@charoo/contracts";
 import {
   all,
   first,
+  run,
   stmt,
   iso,
   authenticate,
@@ -640,7 +641,10 @@ export class Room extends DurableObject<Env> {
         }
         case "leave": {
           if (["STRANGER", "PRIVATE"].includes(room.type))
-            await this.closeInternal(u.id);
+            await this.closeInternal(
+              u.id,
+              room.type === "STRANGER" && input.next === true,
+            );
           else if (room.type !== "CONTACT")
             this.ctx.storage.transactionSync(() => {
               const p = this.participant(u.id)!;
@@ -1312,11 +1316,25 @@ export class Room extends DurableObject<Env> {
       this.event("call.changed", undefined, [c.caller_id, c.target_id]);
     }
   }
-  async closeInternal(actorId: string) {
+  async closeInternal(actorId: string, archivePeerOnNext = false) {
     const cfg = await settings(this.env);
     this.ctx.storage.transactionSync(() => {
       const r = this.meta();
       if (r.state === "CLOSED") return;
+      if (archivePeerOnNext && r.type === "STRANGER") {
+        const peer = this.people().find((person) => person.user_id !== actorId);
+        if (peer) {
+          const archivedAt = iso();
+          this.outbox("quickchat.archive", {
+            userId: peer.user_id,
+            peerId: actorId,
+            roomId: r.id,
+            lastChattedAt: r.last_activity,
+            archivedAt,
+            expiresAt: iso(Date.parse(archivedAt) + 24 * 60 * 60 * 1000),
+          });
+        }
+      }
       r.state = "CLOSED";
       r.closed_at = iso();
       r.purge_at = iso(Date.now() + cfg.conversation_retention_hours * 3600000);
@@ -1566,6 +1584,19 @@ export class Room extends DurableObject<Env> {
       else await this.broadcast(b);
     }
     if (item.kind === "object.delete") await this.env.MEDIA.delete(b.key);
+    if (item.kind === "quickchat.archive")
+      await run(
+        this.env,
+        "INSERT INTO quick_chat_archives(user_id,peer_id,room_id,last_chatted_at,archived_at,expires_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id,room_id) DO NOTHING",
+        [
+          b.userId,
+          b.peerId,
+          b.roomId,
+          b.lastChattedAt,
+          b.archivedAt,
+          b.expiresAt,
+        ],
+      );
     if (item.kind === "call.end") {
       await endCall(this.env, b.id);
       const c = this.call(b.id);

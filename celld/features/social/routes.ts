@@ -126,14 +126,24 @@ export function socialRoutes(app: Hono<HttpEnv>) {
     );
     return c.body(null, 204);
   });
+  app.get("/api/quick-chat-history", async (c) => {
+    const id = actor(c).userId;
+    return c.json(
+      await all(
+        c.env,
+        `SELECT a.room_id AS archive_id,u.id,u.display_name,a.last_chatted_at,a.archived_at,a.expires_at,u.verified AS reconnectable FROM quick_chat_archives a JOIN users u ON u.id=a.peer_id WHERE a.user_id=? AND a.expires_at>? AND u.banned=0 AND (u.suspended_until IS NULL OR u.suspended_until<=?) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=u.id) OR (b.target_id=? AND b.user_id=u.id)) ORDER BY a.archived_at DESC`,
+        [id, iso(), iso(), id, id],
+      ),
+    );
+  });
   app.get("/api/reconnect", async (c) => {
     requireThat(c.get("user").verified, 403, "Verify your email first");
     const id = actor(c).userId;
     return c.json(
       await all(
         c.env,
-        `SELECT u.id,u.display_name,h.matched_at FROM match_history h JOIN users u ON u.id=CASE WHEN h.user_a=? THEN h.user_b ELSE h.user_a END WHERE (h.user_a=? OR h.user_b=?) AND u.verified=1 AND u.banned=0 AND (u.suspended_until IS NULL OR u.suspended_until<=?) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=u.id) OR (b.target_id=? AND b.user_id=u.id)) ORDER BY h.matched_at DESC LIMIT 30`,
-        [id, id, id, iso(), id, id],
+        `SELECT u.id,u.display_name,a.last_chatted_at,a.expires_at FROM quick_chat_archives a JOIN users u ON u.id=a.peer_id WHERE a.user_id=? AND a.expires_at>? AND u.verified=1 AND u.banned=0 AND (u.suspended_until IS NULL OR u.suspended_until<=?) AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=u.id) OR (b.target_id=? AND b.user_id=u.id)) ORDER BY a.archived_at DESC LIMIT 30`,
+        [id, iso(), iso(), id, id],
       ),
     );
   });
