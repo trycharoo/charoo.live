@@ -35,6 +35,7 @@ import {
   Flag,
   Clock,
   Bell,
+  ChevronDown,
   ChevronLeft,
   Check,
   Download,
@@ -1702,196 +1703,17 @@ export function App() {
         {!active && page === "groups" && (
           <section className="chat-home">
             <div className="inbox-heading">
-              <div>
-                <span className="eyebrow">YOUR PEOPLE, ONE LINK AWAY</span>
-                <h1>
-                  Your conversations<span className="accent">.</span>
-                </h1>
-                <p>Pick up where you left off or start something new.</p>
-              </div>
-              <button className="button inbox-create" onClick={startSharedRoom}>
-                <Plus size={17} /> Start a room
-              </button>
-            </div>
-            <div className="quick-actions" aria-label="Start a conversation">
-              <button onClick={() => choosePage("strangers")}>
-                <span className="quick-action-icon featured">
-                  <Shuffle size={22} />
-                </span>
-                <span>Quick chat</span>
-              </button>
-              <button onClick={startSharedRoom}>
-                <span className="quick-action-icon">
-                  <Plus size={22} />
-                </span>
-                <span>Create room</span>
-              </button>
-              <button onClick={openJoinRoom}>
-                <span className="quick-action-icon">
-                  <Link size={21} />
-                </span>
-                <span>Join by link</span>
-              </button>
-            </div>
-            {user && (
-              <section
-                className="reconnect-notices"
-                aria-live="polite"
-                aria-label="Reconnect notices"
-              >
-                <div className="inbox-section-heading">
-                  <div>
-                    <span className="eyebrow">A SECOND HELLO</span>
-                    <h2>Reconnect notices</h2>
-                  </div>
-                  {reconnectRequests.length > 0 && (
-                    <span className="count">{reconnectRequests.length}</span>
-                  )}
-                </div>
-                {reconnectRequests.length ? (
-                  <div className="reconnect-notice-list">
-                    {reconnectRequests.map((request) => (
-                      <article className="reconnect-notice" key={request.id}>
-                        <span className="reconnect-notice-icon">
-                          <Bell size={19} />
-                        </span>
-                        <span>
-                          <strong>
-                            {request.display_name} wants to reconnect
-                          </strong>
-                          <small>
-                            Request received · expires{" "}
-                            {new Date(request.expires_at).toLocaleString([], {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </small>
-                        </span>
-                        <span className="reconnect-notice-status">New</span>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="reconnect-notice-empty">
-                    When someone from an archived chat asks to reconnect, their
-                    notice will appear here. Paid reconnect checkout is not set
-                    up yet.
-                  </p>
-                )}
-              </section>
-            )}
-            <section className="past-chat-section">
-              <div className="inbox-section-heading">
-                <div>
-                  <span className="eyebrow">QUICK CHAT HISTORY</span>
-                  <h2>Archived quick chats</h2>
-                </div>
-              </div>
-              {user ? (
-                history.length ? (
-                  <div className="conversation-list past-chat-list">
-                    {history.map((match) => (
-                      <article
-                        className="conversation-row past-chat-row"
-                        key={match.archive_id}
-                      >
-                        <span
-                          className="conversation-avatar stranger"
-                          aria-hidden="true"
-                        >
-                          <Shuffle size={20} />
-                        </span>
-                        <span className="conversation-copy">
-                          <strong>{match.display_name}</strong>
-                          <small>
-                            Quick chat · reconnect window ends{" "}
-                            {new Date(match.expires_at).toLocaleString([], {
-                              month: "short",
-                              day: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </small>
-                        </span>
-                        <button
-                          className="button secondary small past-chat-reconnect"
-                          disabled
-                          title={
-                            !user.verified
-                              ? "Verify your account before reconnecting"
-                              : !match.reconnectable
-                                ? "Reconnect is unavailable for this account"
-                                : "Paid reconnect will be available when checkout is set up"
-                          }
-                        >
-                          {!user.verified
-                            ? "Verify to reconnect"
-                            : match.reconnectable
-                              ? "Pay to reconnect"
-                              : "Unavailable"}
-                        </button>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="past-chat-empty">
-                    <h3>
-                      {user.verified
-                        ? "No archived quick chats yet"
-                        : "Verify to keep your chat history"}
-                    </h3>
-                    <p>
-                      {user.verified
-                        ? "When the other person hits Next, their chat is saved here for 24 hours so you can reconnect."
-                        : "Verify your account to keep a 24-hour archive when the other person hits Next."}
-                    </p>
-                    {!user.verified && (
-                      <button
-                        className="text-button"
-                        onClick={() => setModal("email")}
-                      >
-                        Verify email <ArrowRight size={16} />
-                      </button>
-                    )}
-                  </div>
-                )
-              ) : (
-                <div className="past-chat-empty">
-                  <h3>Sign in to see past quick chats</h3>
-                  <p>
-                    Sign in to keep a 24-hour archive when the other person hits
-                    Next.
-                  </p>
-                  <button
-                    className="text-button"
-                    onClick={() => setModal("email")}
-                  >
-                    Sign in <ArrowRight size={16} />
-                  </button>
-                </div>
-              )}
-              {user && history.length > 0 && (
-                <p className="past-chat-note">
-                  {user.verified
-                    ? "Archives expire 24 hours after the other person hits Next. Paid reconnect checkout is not configured yet."
-                    : "Verify your account before requesting a paid reconnect. Archives expire after 24 hours."}
-                </p>
-              )}
-            </section>
-            <div className="inbox-section-heading">
-              <div>
-                <span className="eyebrow">HERE FOR THE MOMENT</span>
-                <h2>Current chats</h2>
-              </div>
+              <h1>
+                Chats<span className="accent">.</span>
+              </h1>
               <button
-                className="text-button"
-                onClick={() => choosePage("tonight")}
+                className="button small inbox-create"
+                onClick={() => setModal("newChat")}
               >
-                Discover rooms <ArrowRight size={16} />
+                <Plus size={16} /> New chat
               </button>
             </div>
+
             {conversations.length ? (
               <div className="conversation-list">
                 {conversations.map((room) => (
@@ -1934,22 +1756,106 @@ export function App() {
                   <MessageCircle size={23} />
                 </span>
                 <div>
-                  <h3>Your chats will show up here</h3>
-                  <p>
-                    Meet someone new or start a temporary room for your people.
-                  </p>
+                  <h3>No chats yet</h3>
+                  <p>Your conversations will show up here.</p>
                 </div>
                 <button
                   className="text-button"
-                  onClick={() => choosePage("strangers")}
+                  onClick={() => setModal("newChat")}
                 >
-                  Meet someone <ArrowRight size={16} />
+                  Start a chat <ArrowRight size={16} />
                 </button>
               </div>
             )}
-            <p className="home-safety-note">
-              <Shield size={15} /> Temporary rooms. Real conversations.
-            </p>
+
+            {user && reconnectRequests.length > 0 && (
+              <section
+                className="reconnect-notices"
+                aria-live="polite"
+                aria-label="Reconnect requests"
+              >
+                <div className="inbox-section-heading">
+                  <h2>Reconnect requests</h2>
+                  <span className="count">{reconnectRequests.length}</span>
+                </div>
+                <div className="reconnect-notice-list">
+                  {reconnectRequests.map((request) => (
+                    <article className="reconnect-notice" key={request.id}>
+                      <span className="reconnect-notice-icon">
+                        <Bell size={19} />
+                      </span>
+                      <span>
+                        <strong>
+                          {request.display_name} wants to reconnect
+                        </strong>
+                        <small>
+                          Expires{" "}
+                          {new Date(request.expires_at).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </small>
+                      </span>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+            {user && history.length > 0 && (
+              <details className="past-chat-details">
+                <summary>
+                  <span>Past quick chats</span>
+                  <span className="count">{history.length}</span>
+                  <ChevronDown size={17} aria-hidden="true" />
+                </summary>
+                <div className="conversation-list past-chat-list">
+                  {history.map((match) => (
+                    <article
+                      className="conversation-row past-chat-row"
+                      key={match.archive_id}
+                    >
+                      <span
+                        className="conversation-avatar stranger"
+                        aria-hidden="true"
+                      >
+                        <Shuffle size={20} />
+                      </span>
+                      <span className="conversation-copy">
+                        <strong>{match.display_name}</strong>
+                        <small>
+                          Expires{" "}
+                          {new Date(match.expires_at).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </small>
+                      </span>
+                      <button
+                        className="button secondary small past-chat-reconnect"
+                        disabled
+                        title={
+                          !user.verified
+                            ? "Verify your account before reconnecting"
+                            : !match.reconnectable
+                              ? "Reconnect is unavailable for this account"
+                              : "Paid reconnect will be available when checkout is set up"
+                        }
+                      >
+                        {!user.verified
+                          ? "Verify to reconnect"
+                          : match.reconnectable
+                            ? "Pay to reconnect"
+                            : "Unavailable"}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            )}
           </section>
         )}
         {!active && page === "contacts" && (
