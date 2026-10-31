@@ -49,7 +49,7 @@ import {
   type Settings as AppSettings,
   type Profile,
 } from "@charoo/contracts";
-import { api, setCsrf, getCsrf } from "./api";
+import { api, setCsrf, getCsrf, randomUUID } from "./api";
 const VideoCall = lazy(() =>
   import("./Call").then((m) => ({ default: m.VideoCall })),
 );
@@ -869,7 +869,7 @@ export function App() {
     const form = e.currentTarget;
     await act(async () => {
       const r = await api("/rooms", "POST", {
-        clientOperationId: (form.dataset.operationId ||= crypto.randomUUID()),
+        clientOperationId: (form.dataset.operationId ||= randomUUID()),
         type: modal === "public" ? "AVAILABLE_TONIGHT" : "SHARED_GROUP",
         title: field(form, "title"),
         description: field(form, "description"),
@@ -935,7 +935,7 @@ export function App() {
     e.preventDefault();
     if (!draft.trim() || !active || isMuted) return;
     const payload = {
-      clientMessageId: crypto.randomUUID(),
+      clientMessageId: randomUUID(),
       text: draft.trim(),
       replyTo: reply?.id,
     };
@@ -969,19 +969,24 @@ export function App() {
       if (!response.ok) throw new Error("Upload failed");
       await api(`/media/${init.id}/complete`, "POST", {});
       await submitMessage({
-        clientMessageId: crypto.randomUUID(),
+        clientMessageId: randomUUID(),
         text: `Attachment: ${file.name}`,
         attachmentId: init.id,
       });
     });
   }
   const nav: [Page, string, ReactNode][] = [
-    ["groups", "Your rooms", <Link size={20} />],
+    ["groups", "Chats", <MessageCircle size={20} />],
     ["tonight", "Discover rooms", <Compass size={20} />],
     ["strangers", "Quick chat", <Shuffle size={20} />],
     ["contacts", "Your connections", <Users size={20} />],
     ["profile", "Your profile", <Settings size={20} />],
   ];
+  const reconnectRequests = requests.filter(
+    (request) => request.kind === "RECONNECT",
+  );
+  const mobileNavSelection =
+    modal === "newChat" ? "newChat" : page === "profile" ? "profile" : "groups";
   if (user && user.role !== "USER")
     nav.push(["admin", "Moderation", <Shield size={20} />]);
   const choosePage = (p: Page) => {
