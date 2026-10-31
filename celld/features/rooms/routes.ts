@@ -207,10 +207,14 @@ export function roomRoutes(app: Hono<HttpEnv>) {
       return c.body(null, 204);
     },
   );
-  app.post("/api/rooms/:roomId/leave", async (c) => {
-    await command(c, "leave");
-    return c.body(null, 204);
-  });
+  app.post(
+    "/api/rooms/:roomId/leave",
+    body(z.object({ next: z.boolean().optional() })),
+    async (c) => {
+      await command(c, "leave");
+      return c.body(null, 204);
+    },
+  );
   app.patch(
     "/api/rooms/:roomId",
     body(

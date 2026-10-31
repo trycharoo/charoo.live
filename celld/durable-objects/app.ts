@@ -427,15 +427,19 @@ export class AppCoordinator extends DurableObject<Env> {
               "Request unavailable",
             );
             if (b.kind === "RECONNECT") {
-              const [a, c] = [u.id, target.id].sort();
               requireThat(
                 await first(
                   env,
-                  "SELECT 1 FROM match_history WHERE user_a=? AND user_b=?",
-                  [a, c],
+                  "SELECT 1 FROM quick_chat_archives WHERE user_id=? AND peer_id=? AND expires_at>?",
+                  [u.id, target.id, iso()],
                 ),
-                403,
-                "No previous match",
+                404,
+                "Reconnect window expired",
+              );
+              requireThat(
+                false,
+                402,
+                "Paid reconnect checkout is not available yet",
               );
             } else {
               requireThat(b.roomId, 400, "A shared conversation is required");
@@ -455,7 +459,15 @@ export class AppCoordinator extends DurableObject<Env> {
             const id = previous?.id || crypto.randomUUID();
             await this.effect(
               "event",
-              { type: "request", userIds: [target.id] },
+              {
+                type: "request",
+                userIds: [target.id],
+                payload: {
+                  kind: b.kind,
+                  requesterId: u.id,
+                  requesterName: u.display_name,
+                },
+              },
               previous
                 ? []
                 : [
@@ -484,6 +496,12 @@ export class AppCoordinator extends DurableObject<Env> {
               [input.id, u.id],
             );
             requireThat(r && r.expires_at > iso(), 404, "Request unavailable");
+            if (input.accept && r.kind === "RECONNECT")
+              requireThat(
+                false,
+                402,
+                "Paid reconnect checkout is not available yet",
+              );
             if (r.state === "ACCEPTED")
               return { roomId: r.result_room_id, requesterId: r.requester_id };
             requireThat(r.state === "PENDING", 404, "Request unavailable");
@@ -1034,6 +1052,9 @@ export class AppCoordinator extends DurableObject<Env> {
     await this.ctx.blockConcurrencyWhile(async () => {
       await env.DB.batch([
         stmt(env, "DELETE FROM sessions WHERE expires_at<=?", [iso()]),
+        stmt(env, "DELETE FROM quick_chat_archives WHERE expires_at<=?", [
+          iso(),
+        ]),
         stmt(env, "DELETE FROM email_tokens WHERE expires_at<=?", [iso()]),
         stmt(env, "DELETE FROM oauth_flows WHERE expires_at<=?", [iso()]),
         stmt(
@@ -1066,6 +1087,11 @@ export class AppCoordinator extends DurableObject<Env> {
             g.id,
             g.id,
           ]),
+          stmt(
+            env,
+            "DELETE FROM quick_chat_archives WHERE user_id=? OR peer_id=?",
+            [g.id, g.id],
+          ),
           stmt(
             env,
             "DELETE FROM social_requests WHERE requester_id=? OR target_id=?",

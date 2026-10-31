@@ -13,6 +13,13 @@ interface Palette {
 }
 export const palettes: Palette[] = [
   {
+    id: "sunshine",
+    name: "Sunshine",
+    description: "Bright, easy conversations",
+    dark: { accent: "#ffd21f", background: "#171717" },
+    light: { accent: "#ffd21f", background: "#fafaf8" },
+  },
+  {
     id: "lavender",
     name: "Lavender",
     description: "The original Charoo",
@@ -60,11 +67,15 @@ export interface ThemePreferences {
   appearance: Appearance;
   custom: Record<ThemeMode, ThemeColors>;
 }
-export const THEME_STORAGE_KEY = "charoo.theme.v1";
+export const THEME_STORAGE_KEY = "charoo.theme.v2";
+export const LEGACY_THEME_STORAGE_KEY = "charoo.theme.v1";
 export const defaultTheme: ThemePreferences = {
-  palette: "lavender",
-  appearance: "dark",
-  custom: { dark: { ...palettes[0].dark }, light: { ...palettes[0].light } },
+  palette: "sunshine",
+  appearance: "light",
+  custom: {
+    dark: { accent: "#ffd21f", background: "#171717" },
+    light: { accent: "#ffd21f", background: "#fafaf8" },
+  },
 };
 const validColor = (value: unknown, fallback: string) =>
   typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value)

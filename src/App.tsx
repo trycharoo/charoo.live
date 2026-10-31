@@ -34,6 +34,7 @@ import {
   Video,
   Flag,
   Clock,
+  Bell,
   ChevronLeft,
   Check,
   Download,
@@ -49,7 +50,7 @@ import {
   type Settings as AppSettings,
   type Profile,
 } from "@charoo/contracts";
-import { api, setCsrf, getCsrf } from "./api";
+import { api, setCsrf, getCsrf, randomUUID } from "./api";
 const VideoCall = lazy(() =>
   import("./Call").then((m) => ({ default: m.VideoCall })),
 );
@@ -60,14 +61,6 @@ type Page =
   | "contacts"
   | "profile"
   | "admin";
-const mobileNavLabels: Record<Page, string> = {
-  groups: "Rooms",
-  tonight: "Discover",
-  strangers: "Chat",
-  contacts: "Contacts",
-  profile: "Profile",
-  admin: "Admin",
-};
 function Modal({
   title,
   children,
@@ -252,8 +245,7 @@ export function App() {
     ),
     chatEnd = useRef<HTMLDivElement>(null),
     shareLinkInput = useRef<HTMLInputElement>(null),
-    typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null),
-    explicitAvailable = useRef(false);
+    typingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   activeRef.current = active;
   userRef.current = user;
   statusRef.current = status;
@@ -309,7 +301,7 @@ export function App() {
       api("/conversations"),
       api("/requests"),
       api("/contacts"),
-      userRef.current?.verified ? api("/reconnect") : Promise.resolve([]),
+      api("/quick-chat-history"),
       api("/blocks"),
       api("/calls"),
     ]);
@@ -370,9 +362,8 @@ export function App() {
     const value = await api("/presence", "POST", {
       status: statusRef.current,
       roomId: activeRef.current?.id,
-      heartbeat: !explicitAvailable.current,
+      heartbeat: true,
     });
-    explicitAvailable.current = false;
     setStatus(value.status);
   }
   async function loadAdmin(searchUsers = userSearch) {
@@ -722,6 +713,10 @@ export function App() {
     ) {
       background(() => loadRooms());
     }
+    if (event.type === "request" && event.payload?.kind === "RECONNECT")
+      notify(
+        `${event.payload.requesterName || "Someone"} wants to reconnect with you.`,
+      );
     if (
       ["request", "call.request"].includes(event.type) &&
       "Notification" in window &&
@@ -731,7 +726,9 @@ export function App() {
       new Notification("A new hello on Charoo", {
         body:
           event.type === "request"
-            ? "You have a new connection request."
+            ? event.payload?.kind === "RECONNECT"
+              ? `${event.payload.requesterName || "Someone"} wants to reconnect with you.`
+              : "You have a new connection request."
             : "You have a video invitation.",
         icon: "/icon-192.png",
       });
@@ -869,7 +866,7 @@ export function App() {
     const form = e.currentTarget;
     await act(async () => {
       const r = await api("/rooms", "POST", {
-        clientOperationId: (form.dataset.operationId ||= crypto.randomUUID()),
+        clientOperationId: (form.dataset.operationId ||= randomUUID()),
         type: modal === "public" ? "AVAILABLE_TONIGHT" : "SHARED_GROUP",
         title: field(form, "title"),
         description: field(form, "description"),
@@ -935,7 +932,7 @@ export function App() {
     e.preventDefault();
     if (!draft.trim() || !active || isMuted) return;
     const payload = {
-      clientMessageId: crypto.randomUUID(),
+      clientMessageId: randomUUID(),
       text: draft.trim(),
       replyTo: reply?.id,
     };
@@ -969,19 +966,24 @@ export function App() {
       if (!response.ok) throw new Error("Upload failed");
       await api(`/media/${init.id}/complete`, "POST", {});
       await submitMessage({
-        clientMessageId: crypto.randomUUID(),
+        clientMessageId: randomUUID(),
         text: `Attachment: ${file.name}`,
         attachmentId: init.id,
       });
     });
   }
   const nav: [Page, string, ReactNode][] = [
-    ["groups", "Your rooms", <Link size={20} />],
+    ["groups", "Chats", <MessageCircle size={20} />],
     ["tonight", "Discover rooms", <Compass size={20} />],
     ["strangers", "Quick chat", <Shuffle size={20} />],
     ["contacts", "Your connections", <Users size={20} />],
     ["profile", "Your profile", <Settings size={20} />],
   ];
+  const reconnectRequests = requests.filter(
+    (request) => request.kind === "RECONNECT",
+  );
+  const mobileNavSelection =
+    modal === "newChat" ? "newChat" : page === "profile" ? "profile" : "groups";
   if (user && user.role !== "USER")
     nav.push(["admin", "Moderation", <Shield size={20} />]);
   const choosePage = (p: Page) => {
@@ -1109,7 +1111,7 @@ export function App() {
       const room = activeRef.current;
       if (!room || room.type !== "STRANGER") return;
       try {
-        await api(`/rooms/${room.id}/leave`, "POST", {});
+        await api(`/rooms/${room.id}/leave`, "POST", { next: true });
       } catch {}
       if (ws.current?.readyState === 1)
         try {
@@ -1227,6 +1229,9 @@ export function App() {
                   {p === "contacts" && requests.length > 0 && (
                     <b className="count">{requests.length}</b>
                   )}
+                  {p === "groups" && reconnectRequests.length > 0 && (
+                    <b className="count">{reconnectRequests.length}</b>
+                  )}
                 </button>
               ))}
               <button onClick={openJoinRoom}>
@@ -1337,6 +1342,12 @@ export function App() {
           </div>
           <div className="header-actions">
             <button
+              className="new-chat-trigger"
+              onClick={() => setModal("newChat")}
+            >
+              <Plus size={16} /> New chat
+            </button>
+            <button
               className="theme-trigger"
               aria-label="Customize theme"
               title="Customize theme"
@@ -1346,28 +1357,13 @@ export function App() {
               <i className="theme-current-swatch" aria-hidden="true" />
             </button>
             {user && (
-              <>
-                <span className={`connection ${connected ? "on" : ""}`}>
-                  {connected ? "Live" : "Reconnecting"}
-                </span>
-                <select
-                  aria-label="Availability status"
-                  value={status}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    statusRef.current = next;
-                    setStatus(next);
-                    explicitAvailable.current = next === "Available Tonight";
-                    act(heartbeat);
-                  }}
-                >
-                  <option>Online</option>
-                  <option>Offline</option>
-                  {user.verified && (
-                    <option value="Available Tonight">Open to chat</option>
-                  )}
-                </select>
-              </>
+              <span
+                className={`connection ${connected ? "on" : ""}`}
+                role="status"
+                aria-label={connected ? "Online" : "Reconnecting"}
+              >
+                {connected ? "Online" : "Reconnecting"}
+              </span>
             )}
             {!user && (
               <button
@@ -1444,7 +1440,7 @@ export function App() {
             )}
           </section>
         )}
-        {!active && ["groups", "tonight"].includes(page) && (
+        {!active && page === "tonight" && (
           <section className="hero">
             <div className="hero-copy">
               <span className="pill">
@@ -1704,109 +1700,257 @@ export function App() {
           </section>
         )}
         {!active && page === "groups" && (
-          <>
-            <section className="rooms-home">
-              <div className="section-title">
-                <div>
-                  <span className="eyebrow">FROM A LINK TO A CONVERSATION</span>
-                  <h2>A little less organizing. A little more talking.</h2>
-                </div>
+          <section className="chat-home">
+            <div className="inbox-heading">
+              <div>
+                <span className="eyebrow">YOUR PEOPLE, ONE LINK AWAY</span>
+                <h1>
+                  Your conversations<span className="accent">.</span>
+                </h1>
+                <p>Pick up where you left off or start something new.</p>
               </div>
-              <div className="room-steps">
-                <article className="room-step">
-                  <span className="step-icon">
-                    <Plus size={22} />
-                  </span>
-                  <span className="step-number">01</span>
-                  <h3>Make some room.</h3>
-                  <p>
-                    Give your chat a name and choose when it ends. No
-                    participant list to put together.
-                  </p>
-                </article>
-                <article className="room-step">
-                  <span className="step-icon">
-                    <Link size={22} />
-                  </span>
-                  <span className="step-number">02</span>
-                  <h3>Send the link.</h3>
-                  <p>
-                    Drop the URL wherever your people are. Anyone with it can
-                    join, including guests.
-                  </p>
-                </article>
-                <article className="room-step">
-                  <span className="step-icon">
-                    <Shield size={22} />
-                  </span>
-                  <span className="step-number">03</span>
-                  <h3>You’re the host.</h3>
-                  <p>
-                    Set the topic and pace, mute or remove participants, and
-                    close the room whenever you’re done.
-                  </p>
-                </article>
-              </div>
-              <div className="section-title rooms-title">
-                <div>
-                  <span className="eyebrow">HERE FOR THE MOMENT</span>
-                  <h2>
-                    Your rooms <span className="live-dot" />
-                  </h2>
-                </div>
-                <button className="text-button" onClick={startSharedRoom}>
-                  Create a room <Plus size={16} />
-                </button>
-              </div>
-              <div className="list">
-                {conversations
-                  .filter((r) => r.type === "SHARED_GROUP")
-                  .map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => act(() => openRoom(r.id))}
-                    >
-                      <Link />
-                      <span>
-                        {r.title}
-                        <small>
-                          Expires {new Date(r.expires_at!).toLocaleString()}
-                        </small>
-                      </span>
-                      <ArrowUpRight />
-                    </button>
-                  ))}
-              </div>
-              {!conversations.some((r) => r.type === "SHARED_GROUP") && (
-                <div className="room-empty">
-                  <span className="gate-icon">
-                    <MessageCircle size={25} />
-                  </span>
+              <button className="button inbox-create" onClick={startSharedRoom}>
+                <Plus size={17} /> Start a room
+              </button>
+            </div>
+            <div className="quick-actions" aria-label="Start a conversation">
+              <button onClick={() => choosePage("strangers")}>
+                <span className="quick-action-icon featured">
+                  <Shuffle size={22} />
+                </span>
+                <span>Quick chat</span>
+              </button>
+              <button onClick={startSharedRoom}>
+                <span className="quick-action-icon">
+                  <Plus size={22} />
+                </span>
+                <span>Create room</span>
+              </button>
+              <button onClick={openJoinRoom}>
+                <span className="quick-action-icon">
+                  <Link size={21} />
+                </span>
+                <span>Join by link</span>
+              </button>
+            </div>
+            {user && (
+              <section
+                className="reconnect-notices"
+                aria-live="polite"
+                aria-label="Reconnect notices"
+              >
+                <div className="inbox-section-heading">
                   <div>
-                    <h3>Good conversations start here.</h3>
-                    <p>
-                      A catch-up, a quick plan, a study session. Start a room
-                      and let the link bring everyone together.
-                    </p>
+                    <span className="eyebrow">A SECOND HELLO</span>
+                    <h2>Reconnect notices</h2>
                   </div>
+                  {reconnectRequests.length > 0 && (
+                    <span className="count">{reconnectRequests.length}</span>
+                  )}
+                </div>
+                {reconnectRequests.length ? (
+                  <div className="reconnect-notice-list">
+                    {reconnectRequests.map((request) => (
+                      <article className="reconnect-notice" key={request.id}>
+                        <span className="reconnect-notice-icon">
+                          <Bell size={19} />
+                        </span>
+                        <span>
+                          <strong>
+                            {request.display_name} wants to reconnect
+                          </strong>
+                          <small>
+                            Request received · expires{" "}
+                            {new Date(request.expires_at).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </small>
+                        </span>
+                        <span className="reconnect-notice-status">New</span>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="reconnect-notice-empty">
+                    When someone from an archived chat asks to reconnect, their
+                    notice will appear here. Paid reconnect checkout is not set
+                    up yet.
+                  </p>
+                )}
+              </section>
+            )}
+            <section className="past-chat-section">
+              <div className="inbox-section-heading">
+                <div>
+                  <span className="eyebrow">QUICK CHAT HISTORY</span>
+                  <h2>Archived quick chats</h2>
+                </div>
+              </div>
+              {user ? (
+                history.length ? (
+                  <div className="conversation-list past-chat-list">
+                    {history.map((match) => (
+                      <article
+                        className="conversation-row past-chat-row"
+                        key={match.archive_id}
+                      >
+                        <span
+                          className="conversation-avatar stranger"
+                          aria-hidden="true"
+                        >
+                          <Shuffle size={20} />
+                        </span>
+                        <span className="conversation-copy">
+                          <strong>{match.display_name}</strong>
+                          <small>
+                            Quick chat · reconnect window ends{" "}
+                            {new Date(match.expires_at).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </small>
+                        </span>
+                        <button
+                          className="button secondary small past-chat-reconnect"
+                          disabled
+                          title={
+                            !user.verified
+                              ? "Verify your account before reconnecting"
+                              : !match.reconnectable
+                                ? "Reconnect is unavailable for this account"
+                                : "Paid reconnect will be available when checkout is set up"
+                          }
+                        >
+                          {!user.verified
+                            ? "Verify to reconnect"
+                            : match.reconnectable
+                              ? "Pay to reconnect"
+                              : "Unavailable"}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="past-chat-empty">
+                    <h3>
+                      {user.verified
+                        ? "No archived quick chats yet"
+                        : "Verify to keep your chat history"}
+                    </h3>
+                    <p>
+                      {user.verified
+                        ? "When the other person hits Next, their chat is saved here for 24 hours so you can reconnect."
+                        : "Verify your account to keep a 24-hour archive when the other person hits Next."}
+                    </p>
+                    {!user.verified && (
+                      <button
+                        className="text-button"
+                        onClick={() => setModal("email")}
+                      >
+                        Verify email <ArrowRight size={16} />
+                      </button>
+                    )}
+                  </div>
+                )
+              ) : (
+                <div className="past-chat-empty">
+                  <h3>Sign in to see past quick chats</h3>
+                  <p>
+                    Sign in to keep a 24-hour archive when the other person hits
+                    Next.
+                  </p>
                   <button
-                    className="button secondary"
-                    onClick={startSharedRoom}
+                    className="text-button"
+                    onClick={() => setModal("email")}
                   >
-                    Create your first room <ArrowUpRight size={16} />
+                    Sign in <ArrowRight size={16} />
                   </button>
                 </div>
               )}
-              <p className="room-lifetime">
-                <Clock size={14} /> Rooms close when their timer ends. Just
-                enough space for the moment.
-              </p>
+              {user && history.length > 0 && (
+                <p className="past-chat-note">
+                  {user.verified
+                    ? "Archives expire 24 hours after the other person hits Next. Paid reconnect checkout is not configured yet."
+                    : "Verify your account before requesting a paid reconnect. Archives expire after 24 hours."}
+                </p>
+              )}
             </section>
-            <footer className="page-footer">
-              <span>A link. A room. Your people.</span>
-              <span>Temporary by design · Hosted by you</span>
-            </footer>
-          </>
+            <div className="inbox-section-heading">
+              <div>
+                <span className="eyebrow">HERE FOR THE MOMENT</span>
+                <h2>Current chats</h2>
+              </div>
+              <button
+                className="text-button"
+                onClick={() => choosePage("tonight")}
+              >
+                Discover rooms <ArrowRight size={16} />
+              </button>
+            </div>
+            {conversations.length ? (
+              <div className="conversation-list">
+                {conversations.map((room) => (
+                  <button
+                    className="conversation-row"
+                    key={room.id}
+                    onClick={() => act(() => openRoom(room.id))}
+                  >
+                    <span
+                      className={`conversation-avatar ${room.type.toLowerCase()}`}
+                      aria-hidden="true"
+                    >
+                      {room.type === "STRANGER" ? (
+                        <Shuffle size={20} />
+                      ) : room.type === "AVAILABLE_TONIGHT" ? (
+                        <Sparkles size={20} />
+                      ) : (
+                        <MessageCircle size={20} />
+                      )}
+                    </span>
+                    <span className="conversation-copy">
+                      <strong>{room.title || "Conversation"}</strong>
+                      <small>
+                        {room.type === "STRANGER"
+                          ? "Quick chat · temporary"
+                          : `${room.category || "Room"} · ${room.online} here`}
+                      </small>
+                    </span>
+                    <span className="conversation-presence">
+                      <i className={room.online > 0 ? "online" : ""} />
+                      {room.online}
+                    </span>
+                    <ArrowUpRight size={17} className="conversation-open" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="inbox-empty">
+                <span className="inbox-empty-icon">
+                  <MessageCircle size={23} />
+                </span>
+                <div>
+                  <h3>Your chats will show up here</h3>
+                  <p>
+                    Meet someone new or start a temporary room for your people.
+                  </p>
+                </div>
+                <button
+                  className="text-button"
+                  onClick={() => choosePage("strangers")}
+                >
+                  Meet someone <ArrowRight size={16} />
+                </button>
+              </div>
+            )}
+            <p className="home-safety-note">
+              <Shield size={15} /> Temporary rooms. Real conversations.
+            </p>
+          </section>
         )}
         {!active && page === "contacts" && (
           <section className="content-page">
@@ -1839,6 +1983,12 @@ export function App() {
                       </span>
                       <button
                         className="button small"
+                        disabled={r.kind === "RECONNECT"}
+                        title={
+                          r.kind === "RECONNECT"
+                            ? "Paid reconnect checkout is not configured yet"
+                            : undefined
+                        }
                         onClick={() =>
                           act(async () => {
                             const result = await api(
@@ -1851,7 +2001,7 @@ export function App() {
                           })
                         }
                       >
-                        Accept
+                        {r.kind === "RECONNECT" ? "Unavailable" : "Accept"}
                       </button>
                       <button
                         className="text-button"
@@ -1904,28 +2054,6 @@ export function App() {
                     need to accept.
                   </p>
                 )}
-                <h2>
-                  Meet again <span className="label">FREE FOR MVP</span>
-                </h2>
-                <div className="list">
-                  {history.map((h) => (
-                    <div key={h.id}>
-                      <span>
-                        {h.display_name}
-                        <small>
-                          Previously matched ·{" "}
-                          {new Date(h.matched_at).toLocaleDateString()}
-                        </small>
-                      </span>
-                      <button
-                        className="text-button"
-                        onClick={() => request(h.id, "RECONNECT")}
-                      >
-                        Request reconnect <ArrowUpRight size={16} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
               </>
             )}
           </section>
@@ -2743,24 +2871,39 @@ export function App() {
       </main>
       {!active && (
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {nav
-            .filter(([p]) => p !== "admin")
-            .map(([p, , icon]) => (
-              <button
-                key={p}
-                className={page === p ? "selected" : ""}
-                aria-current={page === p ? "page" : undefined}
-                onClick={() => choosePage(p)}
-              >
-                <span className="mobile-nav-icon">
-                  {icon}
-                  {p === "contacts" && requests.length > 0 && (
-                    <b className="mobile-nav-count">{requests.length}</b>
-                  )}
-                </span>
-                <span>{mobileNavLabels[p]}</span>
-              </button>
-            ))}
+          <button
+            className={mobileNavSelection === "groups" ? "selected" : ""}
+            aria-current={page === "groups" ? "page" : undefined}
+            onClick={() => choosePage("groups")}
+          >
+            <span className="mobile-nav-icon">
+              <MessageCircle size={20} />
+              {reconnectRequests.length > 0 && (
+                <b className="mobile-nav-count">{reconnectRequests.length}</b>
+              )}
+            </span>
+            <span className="mobile-nav-label">Chats</span>
+          </button>
+          <button
+            className={`mobile-nav-new ${mobileNavSelection === "newChat" ? "selected" : ""}`}
+            aria-pressed={mobileNavSelection === "newChat"}
+            onClick={() => setModal("newChat")}
+          >
+            <span className="mobile-nav-icon">
+              <Plus size={18} />
+            </span>
+            <span className="mobile-nav-label">New chat</span>
+          </button>
+          <button
+            className={mobileNavSelection === "profile" ? "selected" : ""}
+            aria-current={page === "profile" ? "page" : undefined}
+            onClick={() => choosePage("profile")}
+          >
+            <span className="mobile-nav-icon">
+              <Settings size={20} />
+            </span>
+            <span className="mobile-nav-label">Profile</span>
+          </button>
         </nav>
       )}
       {calls.length > 0 && !callId && (
@@ -2909,23 +3052,25 @@ export function App() {
                 ? hasRoomInvite
                   ? "Join this room"
                   : "A room starts with you"
-                : modal === "email"
-                  ? "Sign in to Charoo"
-                  : modal === "joinProfile"
-                    ? "Join this room"
-                    : modal === "share"
-                      ? "Your room is ready"
-                      : modal === "invite"
-                        ? "Invite people to your room"
-                        : modal === "report"
-                          ? "Help keep Charoo safe"
-                          : modal === "editRoom"
-                            ? "Your room, your topic"
-                            : modal === "public"
-                              ? "Start a public conversation"
-                              : modal === "kick"
-                                ? `Remove ${kickTarget?.name || "member"}`
-                                : "Create your room"
+                : modal === "newChat"
+                  ? "Start a conversation"
+                  : modal === "email"
+                    ? "Sign in to Charoo"
+                    : modal === "joinProfile"
+                      ? "Join this room"
+                      : modal === "share"
+                        ? "Your room is ready"
+                        : modal === "invite"
+                          ? "Invite people to your room"
+                          : modal === "report"
+                            ? "Help keep Charoo safe"
+                            : modal === "editRoom"
+                              ? "Your room, your topic"
+                              : modal === "public"
+                                ? "Start a public conversation"
+                                : modal === "kick"
+                                  ? `Remove ${kickTarget?.name || "member"}`
+                                  : "Create your room"
           }
           onClose={() => {
             setModal(null);
@@ -2936,7 +3081,47 @@ export function App() {
               setKickReason("");
             }
           }}
+          className={modal === "newChat" ? "new-chat-dialog" : undefined}
         >
+          {modal === "newChat" ? (
+            <div className="new-chat-actions">
+              <button
+                onClick={() => {
+                  setModal(null);
+                  choosePage("strangers");
+                }}
+              >
+                <span className="new-chat-action-icon featured">
+                  <Shuffle size={19} />
+                </span>
+                <span>
+                  <strong>Quick chat</strong>
+                  <small>Meet someone new, one to one</small>
+                </span>
+                <ArrowRight size={17} />
+              </button>
+              <button onClick={startSharedRoom}>
+                <span className="new-chat-action-icon">
+                  <Plus size={19} />
+                </span>
+                <span>
+                  <strong>Create a room</strong>
+                  <small>Bring your people together with a link</small>
+                </span>
+                <ArrowRight size={17} />
+              </button>
+              <button onClick={openJoinRoom}>
+                <span className="new-chat-action-icon">
+                  <Link size={19} />
+                </span>
+                <span>
+                  <strong>Join a room</strong>
+                  <small>Enter an invitation link</small>
+                </span>
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          ) : null}
           {googleEnabled && ["guest", "email"].includes(modal) && (
             <div className="google-sign-in">
               <button
@@ -2957,7 +3142,7 @@ export function App() {
               </div>
             </div>
           )}
-          {modal === "joinUrl" ? (
+          {modal === "newChat" ? null : modal === "joinUrl" ? (
             <JoinRoomForm onJoin={joinRoomFromUrl} />
           ) : modal === "guest" ? (
             <form onSubmit={startGuest}>
