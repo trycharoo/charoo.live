@@ -59,6 +59,7 @@ export const roomSchema = z.object({
   region: z.string().trim().max(80).default(""),
   tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   verifiedOnly: z.boolean().default(false),
+  noTimeLimit: z.boolean().default(false),
   durationHours: z.number().int().min(1).max(24).optional(),
 });
 export const messageSchema = z.object({

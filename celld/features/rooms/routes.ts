@@ -43,7 +43,7 @@ export function roomRoutes(app: Hono<HttpEnv>) {
       uid = actor(c).userId;
     const rows = await all(
       c.env,
-      `SELECT r.* FROM room_index r WHERE type='AVAILABLE_TONIGHT' AND state='OPEN' AND expires_at>?
+      `SELECT r.* FROM room_index r WHERE type='AVAILABLE_TONIGHT' AND state='OPEN' AND (expires_at IS NULL OR expires_at>?)
       AND (?='' OR coalesce(json_extract(data,'$.searchFolded.title'),lower(json_extract(data,'$.title'))) LIKE '%'||?||'%' OR coalesce(json_extract(data,'$.searchFolded.description'),lower(json_extract(data,'$.description'))) LIKE '%'||?||'%' OR coalesce(json_extract(data,'$.searchFolded.tags'),lower(json_extract(data,'$.tags'))) LIKE '%'||?||'%')
       AND (?='' OR json_extract(data,'$.category')=?) AND (? IS NULL OR (created_at,id)<(?,?))
       AND NOT EXISTS(SELECT 1 FROM blocks b WHERE (b.user_id=? AND b.target_id=r.creator_id) OR (b.target_id=? AND b.user_id=r.creator_id)) ORDER BY created_at DESC,id DESC LIMIT 30`,

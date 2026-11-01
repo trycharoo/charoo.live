@@ -26,7 +26,7 @@ export function adminRoutes(app: Hono<HttpEnv>) {
     c.json({
       ...(await first(
         c.env,
-        `SELECT (SELECT count(*) FROM users) AS users,(SELECT count(*) FROM room_index WHERE state='OPEN' AND type='AVAILABLE_TONIGHT' AND expires_at>?) AS public_rooms,(SELECT count(*) FROM room_index WHERE state='OPEN' AND type='SHARED_GROUP' AND expires_at>?) AS shared_rooms,(SELECT count(*) FROM reports WHERE state='OPEN') AS reports`,
+        `SELECT (SELECT count(*) FROM users) AS users,(SELECT count(*) FROM room_index WHERE state='OPEN' AND type='AVAILABLE_TONIGHT' AND (expires_at IS NULL OR expires_at>?)) AS public_rooms,(SELECT count(*) FROM room_index WHERE state='OPEN' AND type='SHARED_GROUP' AND (expires_at IS NULL OR expires_at>?)) AS shared_rooms,(SELECT count(*) FROM reports WHERE state='OPEN') AS reports`,
         [iso(), iso()],
       )),
       ...(await c.env.MATCHER.getByName("charoo").status()),

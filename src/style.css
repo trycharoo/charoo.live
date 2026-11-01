@@ -844,15 +844,7 @@ main {
   margin: 65px auto;
 }
 .match-orb.searching {
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  50% {
-    box-shadow:
-      0 0 0 30px color-mix(in srgb, var(--accent-soft) 33%, transparent),
-      0 0 0 55px color-mix(in srgb, var(--accent-soft) 13%, transparent);
-    transform: rotate(10deg);
-  }
+  animation: none;
 }
 .content-page {
   padding: 45px;
@@ -3347,7 +3339,161 @@ select {
   line-height: 1;
 }
 .match-orb.searching {
-  animation: pulse 2s infinite;
+  width: 206px;
+  height: 206px;
+  margin: 22px auto 35px;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+.match-search-scene {
+  position: relative;
+  width: 190px;
+  height: 190px;
+}
+.match-globe {
+  position: absolute;
+  inset: 14px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-soft) 78%, var(--panel));
+  box-shadow:
+    inset -20px -8px 30px color-mix(in srgb, var(--bg) 36%, transparent),
+    inset 5px 2px 14px color-mix(in srgb, white 12%, transparent),
+    0 12px 34px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.match-globe-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: 400%;
+  height: 100%;
+  max-width: none;
+  fill: color-mix(in srgb, var(--accent) 40%, var(--accent-soft-strong));
+  opacity: 0.84;
+  animation: match-globe-roll 12s linear infinite;
+}
+.match-globe-grid {
+  position: absolute;
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.match-globe-latitude.one {
+  inset: 25% -5%;
+}
+.match-globe-latitude.two {
+  inset: 42% -5%;
+}
+.match-globe-meridian {
+  top: -1px;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.match-globe-meridian.one {
+  width: 42%;
+}
+.match-globe-meridian.two {
+  width: 76%;
+}
+.match-globe-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    conic-gradient(
+      from 215deg,
+      transparent 0deg 224deg,
+      color-mix(in srgb, var(--accent) 63%, transparent) 270deg,
+      transparent 312deg 360deg
+    );
+  mix-blend-mode: screen;
+  animation: match-scan 4.4s linear infinite;
+}
+.match-location {
+  position: absolute;
+  z-index: 1;
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--panel);
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: match-location-pulse 2.2s ease-out infinite;
+}
+.match-location.one {
+  top: 29%;
+  left: 33%;
+}
+.match-location.two {
+  top: 47%;
+  left: 66%;
+  animation-delay: 700ms;
+}
+.match-location.three {
+  top: 68%;
+  left: 43%;
+  animation-delay: 1400ms;
+}
+.match-search-glass {
+  position: absolute;
+  z-index: 2;
+  top: calc(50% - 22px);
+  left: calc(50% - 22px);
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border: 2px solid color-mix(in srgb, var(--accent) 80%, var(--text));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--accent-text);
+  box-shadow:
+    0 5px 16px color-mix(in srgb, var(--bg) 32%, transparent),
+    inset 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  animation: match-search-pass 3.8s var(--ease-out) infinite;
+}
+@keyframes match-globe-roll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+@keyframes match-scan {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes match-location-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 4%, transparent);
+  }
+}
+@keyframes match-search-pass {
+  0%,
+  100% {
+    transform: translate(-37px, 27px) rotate(-18deg);
+  }
+  50% {
+    transform: translate(43px, -35px) rotate(12deg);
+  }
+}
+@media (max-width: 640px) {
+  .match-orb.searching {
+    width: 190px;
+    height: 190px;
+    margin: 14px auto 31px;
+  }
+  .match-search-scene {
+    transform: scale(0.92);
+  }
 }
 .message-bubble {
   background: var(--panel);
