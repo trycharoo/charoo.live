@@ -1684,7 +1684,44 @@ export function App() {
               disabled={busy}
               onClick={toggleQuickChat}
             >
-              <Shuffle size={50} />
+              {queue ? (
+                <div className="match-search-scene" aria-hidden="true">
+                  <div className="match-globe">
+                    <svg
+                      className="match-globe-map"
+                      viewBox="0 0 720 180"
+                      aria-hidden="true"
+                    >
+                      <defs>
+                        <g id="match-landmasses">
+                          <path d="M18 54 28 43 42 39 49 31 66 34 73 43 84 44 89 53 82 61 72 61 68 70 58 73 53 84 42 88 38 99 29 97 28 84 20 78 24 69 16 64Z" />
+                          <path d="m74 91 12 4 7 10-2 13-8 9-2 16-8 14-9-4-2-15-8-12 2-13 8-7 2-10Z" />
+                          <path d="m104 43 10-8 17 1 7 7 14-2 14 9 17 2 6 8-12 5-10-4-10 7-11-1-9 8-12-5-8 4-8-9-11 1-3-10-9-2Z" />
+                          <path d="m121 79 13-4 11 7 5 14-5 11-8 8-3 14-8 11-8-5-2-13-9-10 1-15 7-7Z" />
+                          <path d="m166 35 16-6 15 3 10-5 15 8 4 10-12 5-15-2-8 6-11-4-10 2-8-8Z" />
+                          <path d="m183 57 13-4 16 5 8 11 12 2 5 10-9 7-12-4-8 9-12-3-6-10-13-4-4-11Z" />
+                          <path d="m194 103 12-5 15 3 10 9-6 10-12 1-9 8-12-4-7-10Z" />
+                        </g>
+                      </defs>
+                      <use href="#match-landmasses" />
+                      <use href="#match-landmasses" x="360" />
+                    </svg>
+                    <span className="match-globe-grid match-globe-latitude one" />
+                    <span className="match-globe-grid match-globe-latitude two" />
+                    <span className="match-globe-grid match-globe-meridian one" />
+                    <span className="match-globe-grid match-globe-meridian two" />
+                    <span className="match-globe-shine" />
+                    <span className="match-location one" />
+                    <span className="match-location two" />
+                    <span className="match-location three" />
+                  </div>
+                  <span className="match-search-glass">
+                    <Search size={27} strokeWidth={2.2} />
+                  </span>
+                </div>
+              ) : (
+                <Shuffle size={50} />
+              )}
               <span className="match-orb-label">
                 {queue ? "TAP TO CANCEL" : "TAP TO START"}
               </span>
@@ -1694,7 +1731,7 @@ export function App() {
             </h2>
             <p>
               {queue
-                ? "Tap the shuffle icon to stop your search."
+                ? "Tap the globe to stop your search."
                 : "No pressure. You can leave or report whenever you need to."}
             </p>
           </section>
