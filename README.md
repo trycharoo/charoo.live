@@ -20,7 +20,9 @@ In another terminal:
 pnpm dev
 ```
 
-Open **http://127.0.0.1:5173**. Vite proxies `/api` HTTP and socket requests to Celld on port 9876. `WEB_ORIGIN` must match the browser origin exactly in production, including its port and without a trailing slash. In development, Vite normalizes same-origin requests from its fallback port to the configured `WEB_ORIGIN`; direct Celld requests still need a configured origin. `localhost` and `127.0.0.1` are accepted as aliases on the configured port. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
+Open the URL printed by Vite. In Conductor, Vite uses `CONDUCTOR_PORT` and Celld uses the next port, so separate workspaces can run side by side. Native tests use the next three ports for their runtime, provider fixtures, and test Vite server. Without Conductor's allocation, the defaults remain 5173 for Vite and 9876 for Celld. `VITE_PORT` and `CELLD_PORT` override those choices.
+
+Vite proxies `/api` HTTP and socket requests to Celld. `WEB_ORIGIN` must match the browser origin exactly in production, including its port and without a trailing slash. In development, Vite normalizes same-origin requests to the workspace's configured `WEB_ORIGIN`; direct Celld requests still need a configured origin. `localhost` and `127.0.0.1` are accepted as aliases on the configured port. Guest rooms work immediately. Start Mailpit separately on port 8025 to enable local email sign-in; production uses Resend HTTP.
 
 Room invitation links open the join dialog automatically. Recipients can continue as guests or sign in with Google/email, then enter the invited room using their chosen nickname. Nickname is required; age and sex are optional. New guests keep these details private by default, and returning users retain their profile visibility setting. Google and email returns preserve the invitation until the recipient confirms their profile.
 
@@ -36,7 +38,7 @@ The development wrapper excludes test artifacts, `.context`, docs and Vite sourc
 
 Celld preserves its local state in `.celld/dev`. Development initializes the same SQL migrations used in production and records them in `d1_migrations`. Existing demo Room storage remains isolated: application rooms use `charoo:<uuid>` and SQLite tables beginning with `charoo_`.
 
-`pnpm dev:celld` builds the frontend if `dist/` is absent. To preview a production build directly through Celld, set `WEB_ORIGIN=http://127.0.0.1:9876`, run `pnpm build`, restart Celld, and open port 9876. Keep port 5173 as the origin when using Vite.
+`pnpm dev:celld` builds the frontend if `dist/` is absent. To preview a production build directly through Celld, set `WEB_ORIGIN` to the Celld origin, run `pnpm build`, restart Celld, and open the Celld port. Keep the Vite origin in `WEB_ORIGIN` when using Vite.
 
 ## Commands
 
@@ -78,7 +80,9 @@ When carrying an environment file over from the original application, remove the
 | `REDIS_URL` | Durable Objects, alarms and Queues |
 | `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION` | The `MEDIA` R2 binding; fleet object-store credentials stay in the CLI/node environment |
 | `SMTP_URL` | `RESEND_API_KEY` and `EMAIL_FROM` for production email; Mailpit for local email |
-| `PORT` | Celld listens on port 9876 and Vite on 5173 by default; use their CLI options to override |
+| `CONDUCTOR_PORT` | First port in this workspace's allocated block; Vite uses it and Celld uses the next port |
+| `VITE_PORT` | Optional Vite port override; defaults to `CONDUCTOR_PORT` or 5173 |
+| `CELLD_PORT` | Optional Celld port override; defaults to `CONDUCTOR_PORT + 1` or 9876 |
 | `TRUST_PROXY_CIDRS` | `TRUSTED_CLIENT_IP_HEADER`, set only behind ingress that strips and supplies that header |
 
 `selectWorkerEnvironment` ignores variables outside the allowlist when generating Worker bindings. Remove obsolete credentials from private application env files as well, so those files describe only the services this app uses.
@@ -159,7 +163,7 @@ The production bindings declare R2 storage, a retry queue/dead-letter queue and 
 
 ## Validation
 
-Install Chromium once with `pnpm exec playwright install chromium`. `pnpm test:native` uses ports 9887, 8026 and 5176 and isolated storage under `.context`; it does not consume production provider credentials. Backend tests use SQLite and controlled provider responses to exercise concurrent linking, matching/cancellation, acceptance, limits, duplicates, permission denial, ciphertext tampering and interrupted projections. Native scenarios exercise real D1, DO SQL, R2, Queues, sockets, provider HTTP adapters and process restart; the same command then runs the original desktop/mobile browser scenarios against both the built frontend and Vite development. The original browser scenarios cover invitations and desktop/mobile host controls.
+Install Chromium once with `pnpm exec playwright install chromium`. `pnpm test:native` uses ports `CONDUCTOR_PORT + 2` through `+4` and isolated storage under `.context`; outside Conductor it falls back to 9887, 8026 and 5176. It does not consume production provider credentials. Backend tests use SQLite and controlled provider responses to exercise concurrent linking, matching/cancellation, acceptance, limits, duplicates, permission denial, ciphertext tampering and interrupted projections. Native scenarios exercise real D1, DO SQL, R2, Queues, sockets, provider HTTP adapters and process restart; the same command then runs the original desktop/mobile browser scenarios against both the built frontend and Vite development. The original browser scenarios cover invitations and desktop/mobile host controls.
 
 Real provider accounts and a fleet with multiple nodes are deployment integration checks. The local suite verifies provider contracts and durable recovery without provisioning hosting or contacting those accounts.
 

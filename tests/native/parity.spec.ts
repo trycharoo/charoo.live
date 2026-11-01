@@ -7,8 +7,16 @@ import {
 } from "@playwright/test";
 import { writeFileSync, readFileSync } from "node:fs";
 import { defaultSettings } from "@charoo/contracts";
-const base = "http://127.0.0.1:9887",
-  testHeaders = { "X-Test-Key": "charoo-native-fixture" };
+import {
+  nativeProviderPort,
+  nativeRuntimePort,
+} from "../../celld/scripts/ports";
+const base =
+  process.env.BROWSER_BASE_URL || `http://127.0.0.1:${nativeRuntimePort()}`;
+const providers =
+  process.env.NATIVE_PROVIDER_ORIGIN ||
+  `http://127.0.0.1:${nativeProviderPort()}`;
+const testHeaders = { "X-Test-Key": "charoo-native-fixture" };
 async function identity(browser: Browser, verified = false, role = "USER") {
   const context = await browser.newContext({
     extraHTTPHeaders: { "X-Fixture-Client": crypto.randomUUID() },
@@ -57,9 +65,13 @@ test("production assets, room sockets, REST writes and unauthorized socket activ
     const queue = await (await a.api(`/rooms/${r.id}/join-requests`)).json();
     expect(
       (
-        await a.api(`/rooms/${r.id}/join-requests/${queue[0].id}/respond`, "POST", {
-          accept: true,
-        })
+        await a.api(
+          `/rooms/${r.id}/join-requests/${queue[0].id}/respond`,
+          "POST",
+          {
+            accept: true,
+          },
+        )
       ).status(),
     ).toBe(200);
     const page = await a.context.newPage();
@@ -68,7 +80,7 @@ test("production assets, room sockets, REST writes and unauthorized socket activ
       ws.on("framesent", (frame) => socketFrames.push(String(frame.payload))),
     );
     await page.goto(base);
-    await expect(page.locator(".connection")).toHaveText("Live");
+    await expect(page.locator(".connection")).toHaveText("Online");
     await page
       .getByRole("button", { name: "Native group", exact: true })
       .click();
@@ -153,7 +165,7 @@ test("email upgrades keep the identity, rotate sessions and consume links once",
       ).status(),
     ).toBe(200);
     const state = await (
-      await a.context.request.get("http://127.0.0.1:8026/state")
+      await a.context.request.get(`${providers}/state`)
     ).json();
     const sent = state.mail.find((m: any) => m.To[0].Email === email);
     const token = /#verify=([A-Za-z0-9_-]+)/.exec(sent.Text)![1];
@@ -204,7 +216,7 @@ test("email sign-in returns to the invited room in the browser", async ({
       ).status(),
     ).toBe(200);
     const state = await (
-      await guest.context.request.get("http://127.0.0.1:8026/state")
+      await guest.context.request.get(`${providers}/state`)
     ).json();
     const sent = state.mail.find((m: any) => m.To[0].Email === email);
     const link = sent.Text.match(/http[^\s]+/)[0];
@@ -370,20 +382,20 @@ test("R2 quarantine, scanning retries, scoped URLs and authenticated downloads",
     });
     expect(upload.status()).toBe(204);
     expect((await a.api(`/media/${file.id}/download`)).status()).toBe(404);
-    await a.context.request.post("http://127.0.0.1:8026/control", {
+    await a.context.request.post(`${providers}/control`, {
       data: { scannerFail: true },
     });
     expect(
       (await a.api(`/media/${file.id}/complete`, "POST", {})).status(),
     ).toBe(503);
-    await a.context.request.post("http://127.0.0.1:8026/control", {
+    await a.context.request.post(`${providers}/control`, {
       data: { scannerFail: false },
     });
     expect(
       (await a.api(`/media/${file.id}/complete`, "POST", {})).status(),
     ).toBe(200);
     const state = await (
-        await a.context.request.get("http://127.0.0.1:8026/state")
+        await a.context.request.get(`${providers}/state`)
       ).json(),
       scan = state.scans.at(-1);
     expect((await a.context.request.get(scan.url)).status()).toBe(403);
@@ -439,7 +451,7 @@ test("call consent, AI privacy, reports, audited evidence and staff permissions"
       ).status(),
     ).toBe(200);
     const state = await (
-      await a.context.request.get("http://127.0.0.1:8026/state")
+      await a.context.request.get(`${providers}/state`)
     ).json();
     expect(JSON.stringify(state.ai)).not.toContain(
       "Private message for evidence",
@@ -458,7 +470,7 @@ test("call consent, AI privacy, reports, audited evidence and staff permissions"
     expect((await a.api(`/calls/${call.id}/token`, "POST", {})).status()).toBe(
       200,
     );
-    await a.context.request.post("http://127.0.0.1:8026/control", {
+    await a.context.request.post(`${providers}/control`, {
       data: { livekitFail: true },
     });
     expect((await a.api(`/calls/${call.id}/end`, "POST", {})).status()).toBe(
@@ -467,14 +479,11 @@ test("call consent, AI privacy, reports, audited evidence and staff permissions"
     await expect
       .poll(
         async () =>
-          (
-            await (
-              await a.context.request.get("http://127.0.0.1:8026/state")
-            ).json()
-          ).terminations.length,
+          (await (await a.context.request.get(`${providers}/state`)).json())
+            .terminations.length,
       )
       .toBeGreaterThan(0);
-    await a.context.request.post("http://127.0.0.1:8026/control", {
+    await a.context.request.post(`${providers}/control`, {
       data: { livekitFail: false },
     });
     await a.api(`/calls/${call.id}/end`, "POST", {});

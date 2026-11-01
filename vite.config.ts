@@ -4,11 +4,20 @@ import { existsSync, readFileSync } from "node:fs";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { parse } from "dotenv";
 import { rewriteSameOriginDevOrigin } from "./vite-origin";
+import {
+  devCelldPort,
+  devWebPort,
+  workspaceWebOrigin,
+} from "./celld/scripts/ports";
 const envFile = process.env.CELLD_ENV_FILE || ".env";
 const environment = {
   ...(existsSync(envFile) ? parse(readFileSync(envFile)) : {}),
   ...process.env,
 };
+const webPort = devWebPort(environment);
+const webOrigin =
+  process.env.WEB_ORIGIN ||
+  workspaceWebOrigin(environment.WEB_ORIGIN, environment);
 const providerOrigins = environment.LIVEKIT_URL
   ? [
       new URL(environment.LIVEKIT_URL).origin,
@@ -38,7 +47,7 @@ const normalizeProxyOrigin = (
   const trustedOrigin = rewriteSameOriginDevOrigin(
     request.headers.origin,
     request.headers.host,
-    environment.WEB_ORIGIN,
+    webOrigin,
   );
   if (trustedOrigin) proxyRequest.setHeader("Origin", trustedOrigin);
 };
@@ -64,9 +73,14 @@ export default defineConfig(({ command }) => ({
     },
   ],
   server: {
+    host: "127.0.0.1",
+    port: webPort,
+    strictPort: !!(environment.CONDUCTOR_PORT || environment.VITE_PORT),
     proxy: {
       "/api": {
-        target: process.env.CELLD_API_TARGET || "http://127.0.0.1:9876",
+        target:
+          process.env.CELLD_API_TARGET ||
+          `http://127.0.0.1:${devCelldPort(environment)}`,
         ws: true,
         configure(proxy) {
           proxy.on("proxyReq", normalizeProxyOrigin);

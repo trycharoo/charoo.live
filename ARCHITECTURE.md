@@ -601,7 +601,7 @@ frontend dev server
    |
    +-- frontend
    |
-   +-- /api/* ------> http://127.0.0.1:9876
+   +-- /api/* ------> workspace Celld port (`CONDUCTOR_PORT + 1`, default 9876)
 ```
 
 This preserves production-like URLs and avoids development-only CORS configuration.

@@ -10,26 +10,33 @@ import {
 import { resolve } from "node:path";
 import { parse } from "jsonc-parser";
 import { celldBinary, nativeEnvironment } from "./cli";
+import { nativeProviderPort, nativeRuntimePort, nativeVitePort } from "./ports";
 mkdirSync(".context", { recursive: true });
 const directory = mkdtempSync(resolve(".context/native-"));
+const runtimePort = nativeRuntimePort();
+const providerPort = nativeProviderPort();
+const frontendPort = nativeVitePort();
+const runtimeOrigin = `http://127.0.0.1:${runtimePort}`;
+const providerOrigin = `http://127.0.0.1:${providerPort}`;
+const frontendOrigin = `http://127.0.0.1:${frontendPort}`;
 const config = parse(readFileSync("wrangler.jsonc", "utf8"));
 config.main = "./tests/native/worker.ts";
 config.assets.directory = "./dist";
 config.d1_databases[0].migrations_dir = "celld/migrations";
 config.vars = {
   NODE_ENV: "development",
-  WEB_ORIGIN: "http://127.0.0.1:9887",
+  WEB_ORIGIN: runtimeOrigin,
   MESSAGE_KEY: Buffer.from("x".repeat(32)).toString("base64"),
   EMAIL_FROM: "Charoo <hello@fixture.example>",
-  MAILPIT_URL: "http://127.0.0.1:8026",
+  MAILPIT_URL: providerOrigin,
   GOOGLE_CLIENT_ID: "fixture-google-client",
   GOOGLE_CLIENT_SECRET: "fixture-google-secret",
-  MEDIA_SCANNER_URL: "http://127.0.0.1:8026/scan",
+  MEDIA_SCANNER_URL: `${providerOrigin}/scan`,
   MEDIA_SCANNER_TOKEN: "fixture-scanner-secret",
-  LIVEKIT_URL: "http://127.0.0.1:8026",
+  LIVEKIT_URL: providerOrigin,
   LIVEKIT_API_KEY: "fixture-livekit-key",
   LIVEKIT_API_SECRET: "fixture-livekit-secret",
-  AI_BASE_URL: "http://127.0.0.1:8026/v1",
+  AI_BASE_URL: `${providerOrigin}/v1`,
   AI_API_KEY: "fixture-ai-key",
   AI_MODEL: "fixture-model",
   TRUSTED_CLIENT_IP_HEADER: "X-Fixture-Client",
@@ -47,11 +54,14 @@ cpSync("tests/native/worker.ts", `${directory}/tests/native/worker.ts`);
 symlinkSync(resolve("node_modules"), `${directory}/node_modules`, "dir");
 const providers = spawn("tsx", ["tests/native/providers.ts"], {
   stdio: "inherit",
-  env: nativeEnvironment(),
+  env: {
+    ...nativeEnvironment(),
+    NATIVE_PROVIDER_PORT: String(providerPort),
+  },
 });
 let runtime = spawn(
   celldBinary(),
-  ["dev", directory, "--port", "9887", "--no-watch"],
+  ["dev", directory, "--port", String(runtimePort), "--no-watch"],
   { stdio: "inherit", env: nativeEnvironment() },
 );
 let frontend: ReturnType<typeof spawn> | undefined;
@@ -62,7 +72,7 @@ async function restart() {
   });
   runtime = spawn(
     celldBinary(),
-    ["dev", directory, "--port", "9887", "--no-watch"],
+    ["dev", directory, "--port", String(runtimePort), "--no-watch"],
     { stdio: "inherit", env: nativeEnvironment() },
   );
   await ready();
@@ -73,7 +83,7 @@ async function ready() {
     if (runtime.exitCode !== null)
       throw new Error("Native runtime exited before readiness");
     try {
-      if ((await fetch("http://127.0.0.1:9887/api/health")).ok) return;
+      if ((await fetch(`${runtimeOrigin}/api/health`)).ok) return;
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -85,7 +95,11 @@ async function tests(
 ) {
   const child = spawn("playwright", ["test", "--config", configFile, ...args], {
     stdio: "inherit",
-    env: { ...nativeEnvironment(), BROWSER_BASE_URL: config.vars.WEB_ORIGIN },
+    env: {
+      ...nativeEnvironment(),
+      BROWSER_BASE_URL: config.vars.WEB_ORIGIN,
+      NATIVE_PROVIDER_ORIGIN: providerOrigin,
+    },
   });
   return new Promise<number>((resolve, reject) => {
     child.on("error", reject);
@@ -108,17 +122,18 @@ try {
     if (!process.exitCode)
       process.exitCode = await tests([], "playwright.config.ts");
     if (!process.exitCode) {
-      config.vars.WEB_ORIGIN = "http://127.0.0.1:5176";
+      config.vars.WEB_ORIGIN = frontendOrigin;
       writeFileSync(`${directory}/wrangler.jsonc`, JSON.stringify(config));
       await restart();
       frontend = spawn(
         "vite",
-        ["--host", "127.0.0.1", "--port", "5176", "--strictPort"],
+        ["--host", "127.0.0.1", "--port", String(frontendPort), "--strictPort"],
         {
           stdio: "inherit",
           env: {
             ...nativeEnvironment(),
-            CELLD_API_TARGET: "http://127.0.0.1:9887",
+            CELLD_API_TARGET: runtimeOrigin,
+            WEB_ORIGIN: frontendOrigin,
           },
         },
       );
@@ -128,7 +143,7 @@ try {
         if (frontend.exitCode !== null)
           throw new Error("Vite exited before readiness");
         try {
-          connected = (await fetch(config.vars.WEB_ORIGIN)).ok;
+          connected = (await fetch(frontendOrigin)).ok;
         } catch {}
         if (!connected) await new Promise((r) => setTimeout(r, 100));
       }

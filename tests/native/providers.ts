@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { jwtVerify } from "jose";
+import { nativeProviderPort } from "../../celld/scripts/ports";
 const state = {
   mail: [] as any[],
   scans: [] as any[],
@@ -89,8 +90,9 @@ const server = createServer(async (request, response) => {
     response.end('{"error":"Fixture provider error"}');
   }
 });
-server.listen(8026, "127.0.0.1", () =>
-  console.log("Fixture providers ready on 8026"),
+const port = nativeProviderPort();
+server.listen(port, "127.0.0.1", () =>
+  console.log(`Fixture providers ready on ${port}`),
 );
 for (const signal of ["SIGINT", "SIGTERM"] as const)
   process.on(signal, () => server.close(() => process.exit()));
