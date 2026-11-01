@@ -2,12 +2,14 @@ import { chromium } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { visualFixture } from "../../tests/browser/visual-fixture";
+import { devWebPort } from "./ports";
 const reference = process.env.VISUAL_REFERENCE_URL;
 if (!reference)
   throw new Error(
     "Set VISUAL_REFERENCE_URL to the original Charoo Vite server.",
   );
-const migrated = process.env.VISUAL_TARGET_URL || "http://127.0.0.1:5173";
+const migrated =
+  process.env.VISUAL_TARGET_URL || `http://127.0.0.1:${devWebPort()}`;
 const directory = resolve(process.env.VISUAL_OUTPUT_DIR || ".context/visual");
 mkdirSync(directory, { recursive: true });
 function sameBytes(a: string, b: string) {
