@@ -866,6 +866,7 @@ export function App() {
   async function createRoom(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
+    const noTimeLimit = field(form, "duration") === "none";
     await act(async () => {
       const r = await api("/rooms", "POST", {
         clientOperationId: (form.dataset.operationId ||= randomUUID()),
@@ -879,7 +880,10 @@ export function App() {
           .map((v) => v.trim())
           .filter(Boolean),
         verifiedOnly: new FormData(form).has("verified"),
-        durationHours: Number(field(form, "duration") || 12),
+        noTimeLimit,
+        durationHours: noTimeLimit
+          ? undefined
+          : Number(field(form, "duration") || 12),
       });
       setShareUrl(r.shareUrl || "");
       setInviteCopyMessage("");
@@ -3366,6 +3370,7 @@ export function App() {
                     <option value={6}>6 hours</option>
                     <option value={12}>12 hours</option>
                     <option value={24}>24 hours</option>
+                    <option value="none">No time limit</option>
                   </select>
                 </label>
               </div>

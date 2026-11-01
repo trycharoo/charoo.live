@@ -359,7 +359,7 @@ export class AppCoordinator extends DurableObject<Env> {
               );
               const count = await first(
                 env,
-                "SELECT count(*) AS n FROM room_index WHERE creator_id=? AND type='AVAILABLE_TONIGHT' AND state='OPEN' AND expires_at>?",
+                "SELECT count(*) AS n FROM room_index WHERE creator_id=? AND type='AVAILABLE_TONIGHT' AND state='OPEN' AND (expires_at IS NULL OR expires_at>?)",
                 [u.id, iso()],
               );
               const pending = await first(
@@ -380,12 +380,18 @@ export class AppCoordinator extends DurableObject<Env> {
               );
             const id = crypto.randomUUID(),
               link = b.type === "SHARED_GROUP" ? token() : null;
-            const hours = Math.min(
-              b.durationHours || 24,
-              b.type === "AVAILABLE_TONIGHT"
-                ? cfg.available_room_retention_hours
-                : cfg.shared_room_retention_hours,
-            );
+            const expiresAt = b.noTimeLimit
+              ? null
+              : iso(
+                  Date.now() +
+                    Math.min(
+                      b.durationHours || 24,
+                      b.type === "AVAILABLE_TONIGHT"
+                        ? cfg.available_room_retention_hours
+                        : cfg.shared_room_retention_hours,
+                    ) *
+                    3600000,
+                );
             const record = this.roomRecord(id, b.type, u.id, {
               title: b.title,
               description: b.description,
@@ -394,7 +400,7 @@ export class AppCoordinator extends DurableObject<Env> {
               tags: b.tags,
               verified_only: b.type === "AVAILABLE_TONIGHT" || b.verifiedOnly,
               slow_mode: cfg.available_room_slow_mode,
-              expires_at: iso(Date.now() + hours * 3600000),
+              expires_at: expiresAt,
             });
             const invite = link
               ? {

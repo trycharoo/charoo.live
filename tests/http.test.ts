@@ -245,6 +245,51 @@ describe("HTTP API", () => {
     ).json();
     expect(duplicate.duplicate).toBe(true);
   });
+  it("keeps no-time-limit public rooms discoverable and counts them as active", async () => {
+    const f = await fixture(),
+      host = await f.guest(true),
+      created: { id: string }[] = [];
+    for (let index = 0; index < 3; index++) {
+      const response = await request(
+        f,
+        "/rooms",
+        "POST",
+        {
+          type: "AVAILABLE_TONIGHT",
+          title: `Unlimited room ${index + 1}`,
+          noTimeLimit: true,
+        },
+        host,
+      );
+      expect(response.status).toBe(201);
+      created.push((await response.json()) as { id: string });
+    }
+    const expiry = await f.db
+      .prepare("SELECT expires_at FROM room_index WHERE id=?")
+      .bind(created[0].id)
+      .first();
+    expect(expiry.expires_at).toBeNull();
+
+    const discovery: any = await (
+      await request(f, "/rooms", "GET", undefined, host)
+    ).json();
+    expect(discovery.rooms.map((room: any) => room.id)).toEqual(
+      expect.arrayContaining(created.map((room: any) => room.id)),
+    );
+
+    const capped = await request(
+      f,
+      "/rooms",
+      "POST",
+      {
+        type: "AVAILABLE_TONIGHT",
+        title: "One too many",
+        noTimeLimit: true,
+      },
+      host,
+    );
+    expect(capped.status).toBe(429);
+  });
   it("serves health, sanitizes errors and requires consent", async () => {
     const f = await fixture();
     expect((await request(f, "/health")).status).toBe(200);
