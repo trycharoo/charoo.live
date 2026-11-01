@@ -73,7 +73,7 @@ describe("HTTP API", () => {
       }
     },
   );
-  it("rejects missing, foreign and production loopback origins for room creation", async () => {
+  it("rejects missing, foreign and protocol-mismatched origins for room creation", async () => {
     const f = await fixture(),
       host = await f.guest(),
       input = { type: "SHARED_GROUP", title: "Rejected origin room" };
@@ -96,6 +96,7 @@ describe("HTTP API", () => {
     });
     for (const browserOrigin of [
       "https://evil.example",
+      "http://localhost:5174",
       "http://127.0.0.1:5174",
       "https://127.0.0.1:5173",
     ]) {
