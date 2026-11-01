@@ -20,12 +20,13 @@ import {
   Link,
   Copy,
   MessageCircle,
+  MessageSquare,
   Plus,
   ArrowUpRight,
   ArrowRight,
   Search,
   Shield,
-  Settings,
+  UserRound,
   LogOut,
   Menu,
   X,
@@ -976,9 +977,9 @@ export function App() {
   const nav: [Page, string, ReactNode][] = [
     ["groups", "Chats", <MessageCircle size={20} />],
     ["tonight", "Discover rooms", <Compass size={20} />],
-    ["strangers", "Quick chat", <Shuffle size={20} />],
+    ["strangers", "Quick chat", <MessageSquare size={20} />],
     ["contacts", "Your connections", <Users size={20} />],
-    ["profile", "Your profile", <Settings size={20} />],
+    ["profile", "Your profile", <UserRound size={20} />],
   ];
   const reconnectRequests = requests.filter(
     (request) => request.kind === "RECONNECT",
@@ -1132,6 +1133,23 @@ export function App() {
         notify("Looking for someone new…");
       }
     });
+  const toggleQuickChat = () => {
+    if (!user) {
+      setModal("guest");
+      return;
+    }
+    act(async () => {
+      if (queue) {
+        await api("/match", "DELETE");
+        setQueue(false);
+        return;
+      }
+      await heartbeat();
+      const result = await api("/match", "POST", {});
+      if (result.roomId) await openRoom(result.roomId);
+      else setQueue(true);
+    });
+  };
   const isOwner =
     active?.creator_id === user?.id &&
     ["AVAILABLE_TONIGHT", "SHARED_GROUP"].includes(active?.type);
@@ -1658,46 +1676,27 @@ export function App() {
               private until you choose to share. Conversations expire after they
               end.
             </p>
-            <div className={`match-orb ${queue ? "searching" : ""}`}>
+            <button
+              type="button"
+              className={`match-orb ${queue ? "searching" : ""}`}
+              aria-label={queue ? "Cancel search" : "Find a conversation"}
+              aria-pressed={queue}
+              disabled={busy}
+              onClick={toggleQuickChat}
+            >
               <Shuffle size={50} />
-            </div>
+              <span className="match-orb-label">
+                {queue ? "TAP TO CANCEL" : "TAP TO START"}
+              </span>
+            </button>
             <h2>
               {queue ? "Finding a conversation…" : "Ready for a quick chat?"}
             </h2>
             <p>
-              No pressure. Hit Next for someone new, or report whenever you need
-              to.
+              {queue
+                ? "Tap the shuffle icon to stop your search."
+                : "No pressure. You can leave or report whenever you need to."}
             </p>
-            {queue ? (
-              <button
-                className="button secondary"
-                onClick={() =>
-                  act(async () => {
-                    await api("/match", "DELETE");
-                    setQueue(false);
-                  })
-                }
-              >
-                Cancel search
-              </button>
-            ) : (
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() =>
-                  user
-                    ? act(async () => {
-                        await heartbeat();
-                        const r = await api("/match", "POST", {});
-                        if (r.roomId) await openRoom(r.roomId);
-                        else setQueue(true);
-                      })
-                    : setModal("guest")
-                }
-              >
-                Meet someone <ArrowRight size={18} />
-              </button>
-            )}
           </section>
         )}
         {!active && page === "groups" && (
@@ -1803,56 +1802,71 @@ export function App() {
                 </div>
               </section>
             )}
-            {user && history.length > 0 && (
+            {user && (
               <details className="past-chat-details">
                 <summary>
+                  <img
+                    className="archive-icon"
+                    src="/archive-icon.png"
+                    alt=""
+                  />
                   <span>Past quick chats</span>
                   <span className="count">{history.length}</span>
                   <ChevronDown size={17} aria-hidden="true" />
                 </summary>
                 <div className="conversation-list past-chat-list">
-                  {history.map((match) => (
-                    <article
-                      className="conversation-row past-chat-row"
-                      key={match.archive_id}
-                    >
-                      <span
-                        className="conversation-avatar stranger"
-                        aria-hidden="true"
+                  {history.length ? (
+                    history.map((match) => (
+                      <article
+                        className="conversation-row past-chat-row"
+                        key={match.archive_id}
                       >
-                        <Shuffle size={20} />
-                      </span>
-                      <span className="conversation-copy">
-                        <strong>{match.display_name}</strong>
-                        <small>
-                          Expires{" "}
-                          {new Date(match.expires_at).toLocaleString([], {
-                            month: "short",
-                            day: "numeric",
-                            hour: "numeric",
-                            minute: "2-digit",
-                          })}
-                        </small>
-                      </span>
-                      <button
-                        className="button secondary small past-chat-reconnect"
-                        disabled
-                        title={
-                          !user.verified
-                            ? "Verify your account before reconnecting"
-                            : !match.reconnectable
-                              ? "Reconnect is unavailable for this account"
-                              : "Paid reconnect will be available when checkout is set up"
-                        }
-                      >
-                        {!user.verified
-                          ? "Verify to reconnect"
-                          : match.reconnectable
-                            ? "Pay to reconnect"
-                            : "Unavailable"}
-                      </button>
-                    </article>
-                  ))}
+                        <span
+                          className="conversation-avatar stranger"
+                          aria-hidden="true"
+                        >
+                          <img
+                            className="archive-icon"
+                            src="/archive-icon.png"
+                            alt=""
+                          />
+                        </span>
+                        <span className="conversation-copy">
+                          <strong>{match.display_name}</strong>
+                          <small>
+                            Expires{" "}
+                            {new Date(match.expires_at).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </small>
+                        </span>
+                        <button
+                          className="button secondary small past-chat-reconnect"
+                          disabled
+                          title={
+                            !user.verified
+                              ? "Verify your account before reconnecting"
+                              : !match.reconnectable
+                                ? "Reconnect is unavailable for this account"
+                                : "Paid reconnect will be available when checkout is set up"
+                          }
+                        >
+                          {!user.verified
+                            ? "Verify to reconnect"
+                            : match.reconnectable
+                              ? "Pay to reconnect"
+                              : "Unavailable"}
+                        </button>
+                      </article>
+                    ))
+                  ) : (
+                    <p className="muted past-chat-empty">
+                      No past quick chats yet.
+                    </p>
+                  )}
                 </div>
               </details>
             )}
@@ -2795,8 +2809,8 @@ export function App() {
             aria-pressed={mobileNavSelection === "newChat"}
             onClick={() => setModal("newChat")}
           >
-            <span className="mobile-nav-icon">
-              <Plus size={18} />
+            <span className="mobile-nav-icon mobile-nav-image-icon">
+              <img src="/new-chat-icon.png" alt="" />
             </span>
             <span className="mobile-nav-label">New chat</span>
           </button>
@@ -2806,7 +2820,7 @@ export function App() {
             onClick={() => choosePage("profile")}
           >
             <span className="mobile-nav-icon">
-              <Settings size={20} />
+              <UserRound size={20} />
             </span>
             <span className="mobile-nav-label">Profile</span>
           </button>
@@ -3002,7 +3016,7 @@ export function App() {
                 </span>
                 <span>
                   <strong>Quick chat</strong>
-                  <small>Meet someone new, one to one</small>
+                  <small>Start a one-to-one conversation</small>
                 </span>
                 <ArrowRight size={17} />
               </button>

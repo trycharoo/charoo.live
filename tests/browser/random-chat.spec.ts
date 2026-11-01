@@ -42,7 +42,7 @@ test("Next leaves the current random chat and queues a new match", async ({
     .getByRole("navigation", { name: "Main navigation", exact: true })
     .getByRole("button", { name: "Quick chat", exact: true })
     .click();
-  await page.getByRole("button", { name: "Meet someone" }).click();
+  await page.getByRole("button", { name: "Find a conversation" }).click();
   await expect(page.locator(".chat")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Block Milo Hart", exact: true }),

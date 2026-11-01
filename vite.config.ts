@@ -1,7 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { existsSync, readFileSync } from "node:fs";
+import type { ClientRequest, IncomingMessage } from "node:http";
 import { parse } from "dotenv";
+import { rewriteSameOriginDevOrigin } from "./vite-origin";
 const envFile = process.env.CELLD_ENV_FILE || ".env";
 const environment = {
   ...(existsSync(envFile) ? parse(readFileSync(envFile)) : {}),
@@ -29,6 +31,17 @@ const policy = [
     ? ["upgrade-insecure-requests"]
     : []),
 ].join("; ");
+const normalizeProxyOrigin = (
+  proxyRequest: ClientRequest,
+  request: IncomingMessage,
+) => {
+  const trustedOrigin = rewriteSameOriginDevOrigin(
+    request.headers.origin,
+    request.headers.host,
+    environment.WEB_ORIGIN,
+  );
+  if (trustedOrigin) proxyRequest.setHeader("Origin", trustedOrigin);
+};
 export default defineConfig(({ command }) => ({
   // Worker configuration is loaded above; it must not change Vite's build mode.
   envDir: false,
@@ -55,6 +68,10 @@ export default defineConfig(({ command }) => ({
       "/api": {
         target: process.env.CELLD_API_TARGET || "http://127.0.0.1:9876",
         ws: true,
+        configure(proxy) {
+          proxy.on("proxyReq", normalizeProxyOrigin);
+          proxy.on("proxyReqWs", normalizeProxyOrigin);
+        },
       },
     },
   },

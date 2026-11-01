@@ -35,9 +35,9 @@ export const uuid = (value: string | undefined) =>
     .uuid()
     .transform((value) => value.toLowerCase())
     .parse(value);
-// Same-machine dev twin: Vite prints both http://localhost:5173 and
-// http://127.0.0.1:5173, but browsers treat them as different origins.
-// Outside production, accept the twin so either URL works.
+// Browsers treat localhost and 127.0.0.1 as separate origins even when they
+// reach the same Vite server. Accept that alias only on the configured port;
+// Vite normalizes same-origin fallback-port requests before proxying to Celld.
 export function trustedOrigin(
   env: Pick<Env, "WEB_ORIGIN" | "ADMIN_ORIGIN" | "NODE_ENV">,
   origin: string | undefined | null,
