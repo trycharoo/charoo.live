@@ -461,7 +461,9 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   ).toBe(true);
   await page.getByRole("button", { name: "Toggle menu" }).click();
   await page.getByRole("button", { name: "Quick chat", exact: true }).click();
-  await page.getByRole("button", { name: "Meet someone", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Find a conversation", exact: true })
+    .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.getByLabel("Nickname", { exact: true }).fill("Mobile host");
   expect(
