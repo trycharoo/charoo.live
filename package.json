@@ -13,6 +13,8 @@
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test",
     "deploy": "pnpm build && tsx celld/scripts/deploy.ts",
+    "deploy:cloudflare": "pnpm build && wrangler deploy",
+    "deploy:cloudflare:dry-run": "pnpm build && wrangler deploy --dry-run",
     "dev": "vite --host 127.0.0.1",
     "build": "pnpm typecheck && vite build",
     "test:browser": "playwright test",
@@ -48,6 +50,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^7.1.12",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.156.0"
   }
 }

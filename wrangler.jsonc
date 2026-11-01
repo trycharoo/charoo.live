@@ -55,6 +55,7 @@
     {
       "binding": "DB",
       "database_name": "charoo",
+      "database_id": "7db6b08c-c9ef-44ae-8815-0c789eac81ff",
       "migrations_dir": "celld/migrations",
     },
   ],
