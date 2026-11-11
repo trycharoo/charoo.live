@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react";
 import { existsSync, readFileSync } from "node:fs";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import { parse } from "dotenv";
+import { parse as parseJsonc } from "jsonc-parser";
 import { rewriteSameOriginDevOrigin } from "./vite-origin";
 import {
   devCelldPort,
@@ -10,10 +11,21 @@ import {
   workspaceWebOrigin,
 } from "./celld/scripts/ports";
 const envFile = process.env.CELLD_ENV_FILE || ".env";
-const environment = {
-  ...(existsSync(envFile) ? parse(readFileSync(envFile)) : {}),
-  ...process.env,
-};
+const cloudflareBuildConfig = process.env.CLOUDFLARE_BUILD_CONFIG;
+const cloudflareVars = cloudflareBuildConfig
+  ? parseJsonc(readFileSync(cloudflareBuildConfig, "utf8")).vars
+  : undefined;
+const environment: Record<string, string | undefined> = cloudflareBuildConfig
+  ? {
+      ...process.env,
+      NODE_ENV: cloudflareVars?.NODE_ENV,
+      WEB_ORIGIN: cloudflareVars?.WEB_ORIGIN,
+      LIVEKIT_URL: cloudflareVars?.LIVEKIT_URL,
+    }
+  : {
+      ...(existsSync(envFile) ? parse(readFileSync(envFile)) : {}),
+      ...process.env,
+    };
 const webPort = devWebPort(environment);
 const webOrigin =
   process.env.WEB_ORIGIN ||

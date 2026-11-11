@@ -1,6 +1,8 @@
 # Charoo application architecture
 
-This repository implements Charoo's existing React design on Celld 0.6.1. The original source is a reference; migration does not change it or import its PostgreSQL/Redis data. The conventions below remain the Celld foundation.
+This repository implements Charoo's React application using Workers, Hono, Durable Objects, D1, R2 and Queues. Production uses Cloudflare through `wrangler.cloudflare.jsonc`; Celld 0.6.1 remains the local development path and an optional fleet hosting target through `wrangler.jsonc`.
+
+Read [SRS.md](./SRS.md) for the current product and implementation contract and [AGENTS.md](./AGENTS.md) for agent continuity. The detailed Celld fleet sections below describe that hosting path, not Cloudflare deployment. The original migration did not import PostgreSQL/Redis data.
 
 ## Application authorities
 
@@ -15,7 +17,7 @@ This repository implements Charoo's existing React design on Celld 0.6.1. The or
 | Discovery / RateLimiter                      | Permission-checked discovery invalidations / anonymous HTTP limits                                                                               |
 | R2 / Queues / Cron                           | Private quarantine/approved media, retry delivery and cleanup                                                                                    |
 
-`room_index`, `membership_index`, `invite_index` and `entity_index` in D1 are query aids. Every history, upload, download, socket event and mutation asks the authoritative Room. UUID addresses and `charoo_` SQLite tables isolate application rooms from old demo data. The existing Worker name, `Room` class and `v1` migration are retained; `v2` appends the new classes.
+`room_index`, `membership_index`, `invite_index` and `entity_index` in D1 are query aids. Every history, upload, download, socket event and mutation asks the authoritative Room. UUID addresses and `charoo_` SQLite tables isolate application rooms from old demo data. Cloudflare uses Worker `charoo-live`; the Celld target retains `celld-boilerplate`. Preserve identities and migration history within each target: `Room` is introduced by `v1`, and `v2` appends the other classes.
 
 ## Commit and recovery protocol
 
@@ -36,7 +38,7 @@ Web Crypto retains AES-256-GCM and the original `iv.tag.body` encoding with room
 
 ## Frontend and transport
 
-`src/` contains Charoo's retained React components and CSS; `public/` holds its icons, manifest and service worker. Vite serves development and builds `dist/` for Celld assets. The service worker bypasses API requests. Frontend changes cover API/transport connections, authenticated uploads, REST message writes and stable room-creation operation IDs.
+`src/` contains Charoo's retained React components and CSS; `public/` holds its icons, manifest and service worker. Vite serves development and builds `dist/` for Worker static assets on the selected platform. The service worker bypasses API requests. Frontend changes cover API/transport connections, authenticated uploads, REST message writes and stable room-creation operation IDs.
 
 Separate authenticated notification, room and discovery sockets persist connection metadata for hibernation. Browser transport keeps one active room subscription, reconnects with backoff and reloads history. Socket input accepts only typing/ping; message creation remains REST with `clientMessageId` deduplication. Close code 4001 represents permission revocation, using Celld 0.6.1's permitted application close-code range. Notifications contain invalidations rather than plaintext history.
 
@@ -46,27 +48,25 @@ Provider configuration, scanner capabilities, local commands, native D1 migratio
 
 # Architecture
 
-This document defines the architecture standard implemented by this boilerplate.
-
-The goal is a small, opinionated Celld application shape with sensible defaults for development and production. It is intentionally not a framework on top of Celld.
+This section describes the shared application structure and its Celld foundation. Hosting-specific fleet operations are identified below; use the Cloudflare configuration and commands for Cloudflare production. The goal remains a small application structure built on native platform bindings.
 
 ## 1. Principles
 
-1. **Celld remains the runtime abstraction.** Use Workers, Durable Objects, Queues, Workflows, Cron, KV, D1, R2, service bindings, and other Celld-supported surfaces directly.
+1. **Use the selected runtime's native bindings.** Cloudflare is the production target; Celld is the local/optional fleet target. Use the shared Workers, Durable Objects, Queues, Cron, D1, R2 and other supported surfaces directly; verify compatibility on the affected platform.
 2. **Hono owns the public HTTP boundary, with RESTful HTTP as the default client contract.** It handles routing, authentication/authorization context, validation, middleware, errors, and public HTTP/WebSocket URLs.
 3. **Durable Objects own stateful identities.** Use them when one logical entity needs a single consistent owner, durable local state, serialized coordination, alarms, or long-lived connections.
-4. **Prefer native Celld RPC internally.** If a Worker wants to tell a Durable Object to do something, method-style RPC is normally clearer than inventing an internal HTTP endpoint.
+4. **Prefer native Durable Object RPC internally.** If a Worker wants to tell a Durable Object to do something, method-style RPC is normally clearer than inventing an internal HTTP endpoint. Verify the shared RPC surface on the selected runtime.
 5. **Use Durable Object `fetch()` when HTTP semantics are actually useful.** WebSocket upgrades are the main example.
 6. **Keep domain logic independent of transport.** Hono routes, queue consumers, workflows, and Durable Objects should be able to call shared feature code rather than embedding business logic in transport handlers.
-7. **Use one canonical `wrangler.jsonc`.**
-8. **Use native `celld dev` and `celld deploy`.**
+7. **Keep deployment targets explicit.** Use root `wrangler.cloudflare.jsonc` for Cloudflare and root `wrangler.jsonc` for Celld.
+8. **Use the command for the intended target.** `pnpm dev:celld` and `pnpm run deploy` invoke Celld; `pnpm run deploy:cloudflare` invokes Wrangler for Cloudflare.
 9. **Keep application environment separate from fleet/infrastructure environment.**
 10. **Add complexity only after a concrete requirement appears.**
 
 ## 2. Default stack
 
 ```text
-Celld
+Cloudflare Workers (production) / Celld (local or fleet)
   +
 Hono
   +
@@ -78,7 +78,7 @@ Zod
 Responsibilities:
 
 ```text
-Celld
+Selected runtime
   runtime, Workers, Durable Objects, bindings, queues,
   workflows, cron, storage surfaces, deployment
 
@@ -548,19 +548,9 @@ The project does not prescribe how infrastructure supplies these values.
 
 ## 16. Wrangler
 
-There is one canonical root `wrangler.jsonc`.
+There are two explicit root configurations: `wrangler.cloudflare.jsonc` for Cloudflare production and `wrangler.jsonc` for Celld development/fleet tooling. Keep their shared bindings and migration histories consistent when changing the shared runtime; preserve target-specific account, resource and environment settings.
 
-Do not maintain:
-
-```text
-wrangler.dev.jsonc
-wrangler.prod.jsonc
-wrangler.staging.jsonc
-```
-
-The root location is intentional. Celld resolves project-relative entrypoints, assets, and migration paths beneath the Wrangler project root, so a root config works for both frontend build output and `celld/` source.
-
-The canonical file contains structural configuration and remains free of production secrets.
+The root location preserves project-relative entrypoints, assets and migration paths. Both files remain free of secret values. Cloudflare receives managed secret bindings; the Celld deployment wrapper uses its separate private environment/configuration path.
 
 ## 17. Development
 
@@ -624,7 +614,9 @@ React/Vite compiles Charoo into `dist/`. The build emits `_headers` with CSP, MI
 
 ## 20. Production deployment
 
-The stable project command is:
+Cloudflare production uses `pnpm run deploy:cloudflare`, targeting `wrangler.cloudflare.jsonc`. Apply D1 migrations with `pnpm run db:migrate:cloudflare`. Its build reads public production settings from that configuration; secrets are uploaded separately with Wrangler. See [README.md](./README.md#cloudflare-deployment).
+
+For the optional Celld fleet target, the command is:
 
 ```bash
 pnpm run deploy
@@ -636,11 +628,9 @@ The wrapper ultimately invokes native:
 celld deploy
 ```
 
-It does not use `wrangler deploy`.
+That native fleet wrapper does not invoke `wrangler deploy`. The following fleet-specific sections describe Celld deployment and do not prescribe Cloudflare's secret or hosting behavior.
 
-Wrangler describes the application. Celld owns deployment.
-
-## 21. Production Worker variables
+## 21. Celld fleet Worker variables
 
 Native `celld deploy` does not read `.dev.vars` into production Worker bindings.
 

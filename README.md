@@ -1,8 +1,14 @@
-# Charoo on Celld
+# Charoo
 
-Charoo's existing React interface and features, implemented on Celld **0.6.1**, Hono, Durable Objects, D1, R2 and Queues. Application storage starts fresh. PostgreSQL, Redis and application S3 credentials are unnecessary.
+Charoo's React application runs on Cloudflare Workers, Hono, Durable Objects, D1, R2 and Queues. Celld **0.6.1** supports local development and optional self-hosted fleet deployment. PostgreSQL, Redis and application S3 credentials are unnecessary.
 
-The original Charoo working tree remains the design reference. React components, CSS, icons, manifest and service worker live in `src/` and `public/`. Vite builds `dist/`, which Celld serves alongside the API.
+The original Charoo working tree remains the design reference. React components, CSS, icons, manifest and service worker live in `src/` and `public/`. Vite builds `dist/`, which the selected Worker runtime serves alongside the API.
+
+## Requirements and agent continuity
+
+[SRS.md](./SRS.md) records product flows, backend ownership, REST/WebSocket transport, security, recovery, and acceptance requirements. [AGENTS.md](./AGENTS.md) tells coding agents to read that contract and preserve it during feature work. It also requires a local implementation gist before context compaction or handoff, using [docs/HANDOFF_TEMPLATE.md](./docs/HANDOFF_TEMPLATE.md).
+
+For a harness that does not automatically discover `AGENTS.md`, use this startup instruction: **Read `AGENTS.md` and `SRS.md` before implementing this feature; follow the documented contract and checkpoint/resume procedure.** Commit/merge these repository notes into the branch used for new feature workspaces so those workspaces inherit them. Task checkpoints under gitignored `.context/handoffs/` must be transferred explicitly when continuing the same unfinished task elsewhere.
 
 ## Local development
 
@@ -32,7 +38,7 @@ Quick chat provides **Next** in the chat header and member sidebar to leave the 
 
 Inside a room, the left sidebar shows members, invitation tools, and host controls. Back restores the main navigation; on mobile, the Members button opens the same sidebar. Hosts can mute members for 30 minutes or unmute them immediately. Muted members can read but cannot send messages, reactions, or attachments. Block/Unblock hides or restores a person's messages for the user who clicks it and stops private interactions.
 
-Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's dark Lavender theme.
+Appearance is available from the top bar's palette button and the main sidebar, including before sign-in. Choose Pop, Fern, Sunshine, Lavender, Ocean, Mint, Rose, Amber or Slate; switch between light, dark and device appearance; or pick custom accent and background colors. Panels and text adapt across the app, including rooms and dialogs. Changes apply immediately and persist in this browser, with separate custom colors for light and dark appearances. Reset to default restores Charoo's light Pop theme with a warm paper background and bright yellow accents.
 
 The development wrapper excludes test artifacts, `.context`, docs and Vite source files from Celld’s native watcher; backend/config/build changes still rebuild the Worker. Vite owns frontend source updates.
 
@@ -131,6 +137,30 @@ Uploads use authenticated Worker endpoints with origin and CSRF checks. R2 keys 
 It authenticates with the configured bearer token, reads the quarantine object with GET, and writes sanitized output with PUT using the same MIME type. It must return boolean `clean`, `magicBytesValid`, `metadataStripped` and `contentSafe` fields. Output must exist, be nonempty, and fit the declared size. Each URL expires after five minutes and is restricted to one attachment, scan attempt and operation; aborts and approval revoke it earlier. Downloads recheck current membership and approval. Failed deletions and call termination remain in durable outboxes for retry.
 
 The assistant sends a bounded style prompt without conversation history. LiveKit tokens require both users' consent, last five minutes, and grant access only to the corresponding call room. An ended call cannot issue new tokens while provider deletion is retried.
+
+## Cloudflare deployment
+
+`wrangler.cloudflare.jsonc` deploys the `charoo-live` Worker with its Durable Objects to Cloudflare, using the existing `charoo-d1-db` D1 database and `charoo-media` R2 bucket. The browser origin is **https://charoo-live.shy-star-eff8.workers.dev**; `vars.WEB_ORIGIN` must match it exactly. This configuration is separate from local Celld development and the fleet deployment below.
+
+`pnpm run build:cloudflare` uses the public production settings from that configuration for the generated security headers, including LiveKit connection origins when configured. The secrets file is only passed to Wrangler for upload.
+
+Create the `charoo-jobs` and `charoo-jobs-dead-letter` queues once if they do not already exist, then apply the D1 migrations before deployment:
+
+```sh
+pnpm exec wrangler queues create charoo-jobs --config wrangler.cloudflare.jsonc
+pnpm exec wrangler queues create charoo-jobs-dead-letter --config wrangler.cloudflare.jsonc
+pnpm run db:migrate:cloudflare
+```
+
+For the first deployment, provide `MESSAGE_KEY` through the private, ignored `.secrets.cloudflare.json` file. It must contain a JSON object mapping secret names to values; `MESSAGE_KEY` must be a base64-encoded 32-byte random key. Keep the file private and retain a secure backup of this key. Deploy the Worker and secrets together:
+
+```sh
+pnpm run deploy:cloudflare --secrets-file .secrets.cloudflare.json
+```
+
+Later deployments can use `pnpm run deploy:cloudflare` to retain the stored secrets. To add or update a provider secret interactively, run `pnpm run secret:cloudflare KEY`, for example `pnpm run secret:cloudflare GOOGLE_CLIENT_SECRET`. Use the complete provider groups described in `.env.example`: put nonsecret URLs, IDs, model names and email sender settings in `wrangler.cloudflare.jsonc` under `vars`, and upload their secret keys with the secret command. AI and video also need their admin feature flags enabled.
+
+Secrets are available to the Worker and its Durable Objects through `env`; keep them out of frontend code and `VITE_*` settings. Preserve `MESSAGE_KEY` across deployments while retaining the same data: replacing it prevents existing messages and room invitations from being decrypted. The Cloudflare scripts do not load production values from `.env` or `.env.production`.
 
 ## Deployment
 
