@@ -895,7 +895,7 @@ export class AppCoordinator extends DurableObject<Env> {
             "Recent match",
           );
         const id = crypto.randomUUID(),
-          record = this.roomRecord(id, "STRANGER", a),
+          record = this.roomRecord(id, "STRANGER", a, { slow_mode: 0 }),
           op = `match:${id}`,
           payload = { record, members: [a, b], invite: null, matched: true };
         await env.DB.batch([

@@ -530,7 +530,8 @@ export class Room extends DurableObject<Env> {
             if (old) return { id: old.id as string, duplicate: true };
             const p = this.participant(u.id)!;
             requireThat(
-              !p.last_message_at ||
+              r.type === "STRANGER" ||
+                !p.last_message_at ||
                 Date.now() - Date.parse(p.last_message_at) >=
                   r.slow_mode * 1000,
               429,
