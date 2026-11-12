@@ -1,0 +1,5 @@
+interface:
+  display_name: "Engineering SRS Guardian"
+  short_description: "Plan, audit and hand off builds against a living SRS"
+policy:
+  allow_implicit_invocation: true
