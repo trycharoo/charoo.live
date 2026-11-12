@@ -10,6 +10,10 @@ The original Charoo working tree remains the design reference. React components,
 
 For a harness that does not automatically discover `AGENTS.md`, use this startup instruction: **Read `AGENTS.md` and `SRS.md` before implementing this feature; follow the documented contract and checkpoint/resume procedure.** Commit/merge these repository notes into the branch used for new feature workspaces so those workspaces inherit them. Task checkpoints under gitignored `.context/handoffs/` must be transferred explicitly when continuing the same unfinished task elsewhere.
 
+Engineering SRS Guardian is installed at [.agents/skills/engineering-srs-guardian](./.agents/skills/engineering-srs-guardian/SKILL.md). Use it for architecture, features, significant bug fixes and engineering reviews. Start with [docs/engineering/PROJECT_SRS.md](./docs/engineering/PROJECT_SRS.md) for the contract index, assessment, decisions, traceability and shared handoff. `SRS.md` remains the canonical product contract.
+
+In Codex, invoke it with `$engineering-srs-guardian`, for example: **Use $engineering-srs-guardian to review this change against SRS.md.** Codex supports repository skills under `.agents/skills`; if it does not appear, restart the session in this workspace. Other Conductor agents may use different discovery conventions: explicitly ask them to read `AGENTS.md` and the linked `SKILL.md`. Installation details and compatibility evidence are in the [skill README](./.agents/skills/engineering-srs-guardian/README.md).
+
 ## Local development
 
 Requirements: Node.js 22.13+ (24 recommended), pnpm 12.9.1, Celld 0.6.1. The scripts find Celld on PATH or at `~/.local/bin/celld`; `CELLD_BIN` can override its location.

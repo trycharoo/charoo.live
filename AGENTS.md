@@ -6,6 +6,17 @@ Read [SRS.md](SRS.md) before planning implementation. It defines the product req
 
 Follow the active system/developer instructions and the user's current task. These repository notes establish the default implementation contract; they do not override those instructions or expand authorization. If source and documentation disagree, identify the discrepancy and verify the behavior before relying on either.
 
+## SRS-driven engineering
+
+Use [Engineering SRS Guardian](.agents/skills/engineering-srs-guardian/SKILL.md) for application architecture, feature implementation, significant bug fixes, technical decisions, and engineering reviews. Read the skill when it applies; if the harness does not discover local skills, open that file explicitly. Routine edits need only proportionate checks.
+
+- Start with the relevant requirements in `SRS.md` and decisions in `SRS.md` / `ARCHITECTURE.md`. [PROJECT_SRS.md](docs/engineering/PROJECT_SRS.md) indexes the existing contract; [ARCHITECTURE_DECISIONS.md](docs/engineering/ARCHITECTURE_DECISIONS.md) links existing decisions and records new consequential choices. Preserve the existing FR/BE/AD IDs and canonical document locations.
+- Inspect actual source, contracts and tests before proposing substantive modifications. Understand the actors, business logic, system boundaries, authoritative data owners and failure paths before implementation.
+- Evaluate credible architectural alternatives against the actual requirement and established decisions. Technology suggestions and the skill's worked examples are candidates, not requirements.
+- Verify consistency across affected frontend, backend, API/event contracts, database/migrations and infrastructure. Preserve business invariants, authorization, retries and lifecycle rules across those boundaries.
+- Maintain [IMPLEMENTATION_MATRIX.md](docs/engineering/IMPLEMENTATION_MATRIX.md) with affected requirement IDs, source/test evidence, verification level and known gaps. Never infer completion from code presence or a passing unrelated test.
+- Update the canonical SRS when approved requirements change, the decision log when consequential architecture changes, and the matrix when implementation evidence changes. Distinguish confirmed requirements, observed behavior, recommendations and unknowns; keep defects visible rather than redefining the contract around them.
+
 ## Preserve the implementation contract
 
 - Production uses Cloudflare Workers and Durable Objects through `wrangler.cloudflare.jsonc`. Local Celld and optional fleet tooling use `wrangler.jsonc`; choose the command for the intended target.
@@ -19,6 +30,8 @@ Follow the active system/developer instructions and the user's current task. The
 **Before context becomes full, before a context refresh/compaction, or before handing work to another session, save a concise implementation gist in `.context/handoffs/<task-slug>-<agent-slug>.md`, using [docs/HANDOFF_TEMPLATE.md](docs/HANDOFF_TEMPLATE.md). Preserve the objective, latest user steering, decisions, completed changes, verification, external actions already performed, unresolved work, and exact next step. After compaction, restart, or handoff, read this file and the relevant SRS requirements, verify them against the current workspace, and continue the same task.**
 
 Create a checkpoint early during substantial work and update it after meaningful milestones and before context-heavy investigations. Do not wait for an exact remaining-context percentage: the harness may not expose one or may compact without warning. Each agent owns a distinct task/agent file and must not overwrite another agent's checkpoint. Keep the gist brief and replace stale details instead of appending a transcript.
+
+Also refresh [CONTEXT_HANDOFF.md](docs/engineering/CONTEXT_HANDOFF.md) at meaningful engineering milestones and session handoffs with a concise, sanitized shared summary, verification limits and next action. Keep task-specific working details in the required `.context/handoffs/` files; the shared summary does not replace them. The coordinating agent owns shared updates during parallel work. On resume, check this summary and the matching task checkpoint against actual repository state.
 
 Only invoke compaction/refresh when the harness exposes a supported control. A Markdown instruction cannot force the harness to reset context; if no control exists, save the checkpoint and continue using the harness's normal continuation. Never claim a refresh occurred when it did not.
 
