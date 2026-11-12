@@ -1529,9 +1529,9 @@ export function App() {
                 <span className="live-dot" /> GROUP CHAT, WITHOUT THE SETUP
               </span>
               <h1>
-                One link.
+                Chat,
                 <br />
-                <em>Everyone’s in.</em>
+                <em>Ready.. Go!</em>
               </h1>
               <p>
                 Skip picking participants. Just share a URL.
