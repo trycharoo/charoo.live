@@ -55,7 +55,7 @@ export async function suggestion(
         max_tokens: 120,
       }),
       signal: AbortSignal.timeout(20000),
-      redirect: "error",
+      redirect: "manual",
     },
     "Assistant temporarily unavailable",
   );

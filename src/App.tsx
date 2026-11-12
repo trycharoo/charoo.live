@@ -2,6 +2,8 @@ import { Realtime } from "./realtime";
 import { RoomSidebar } from "./RoomSidebar";
 import { JoinRoomForm } from "./JoinRoomForm";
 import { ThemeSettings } from "./ThemeSettings";
+import { ProfilePicture } from "./ProfilePicture";
+import { QuickChatDisclosure } from "./QuickChatDisclosure";
 import { useTheme } from "./useTheme";
 import {
   useEffect,
@@ -1029,6 +1031,37 @@ export function App() {
       });
     });
   }
+  async function decidePictureSharing(
+    roomId: string,
+    decision: "approved" | "declined",
+    pictureId?: string,
+  ) {
+    if (
+      activeRef.current?.id !== roomId ||
+      activeRef.current.type !== "STRANGER"
+    )
+      return;
+    await act(async () => {
+      try {
+        const snapshot = await api(`/rooms/${roomId}/picture-sharing`, "POST", {
+          decision,
+          ...(decision === "approved" ? { pictureId } : {}),
+        });
+        if (activeRef.current?.id !== roomId) return;
+        setActive(snapshot);
+        activeRef.current = snapshot;
+      } catch (error) {
+        if (activeRef.current?.id === roomId) {
+          const snapshot = await api(`/rooms/${roomId}`).catch(() => null);
+          if (snapshot && activeRef.current?.id === roomId) {
+            setActive(snapshot);
+            activeRef.current = snapshot;
+          }
+        }
+        throw error;
+      }
+    });
+  }
   const nav: [Page, string, ReactNode][] = [
     ["groups", "Chats", <MessageCircle size={20} />],
     ["tonight", "Discover rooms", <Compass size={20} />],
@@ -1039,8 +1072,13 @@ export function App() {
   const reconnectRequests = requests.filter(
     (request) => request.kind === "RECONNECT",
   );
-  const mobileNavSelection =
-    modal === "newChat" ? "newChat" : page === "profile" ? "profile" : "groups";
+  const mobileTabs: { id: Page; label: string; icon: ReactNode }[] = [
+    { id: "groups", label: "Chats", icon: <MessageCircle size={20} /> },
+    { id: "tonight", label: "Discover", icon: <Compass size={20} /> },
+    { id: "strangers", label: "Quick", icon: <Shuffle size={20} /> },
+    { id: "contacts", label: "Contacts", icon: <Users size={20} /> },
+    { id: "profile", label: "Profile", icon: <UserRound size={20} /> },
+  ];
   if (user && user.role !== "USER")
     nav.push(["admin", "Moderation", <Shield size={20} />]);
   const choosePage = (p: Page) => {
@@ -2190,6 +2228,7 @@ export function App() {
                     </p>
                   </div>
                 </div>
+                <ProfilePicture key={user.id} />
                 <form
                   className="profile-form"
                   onSubmit={(e) => {
@@ -2237,7 +2276,7 @@ export function App() {
                     />
                   </label>
                   <label>
-                    Region visibility
+                    Age, sex and region visibility
                     <select
                       name="visibility"
                       defaultValue={user.profile.aslVisibility}
@@ -2324,7 +2363,7 @@ export function App() {
                 <p>
                   {active.type === "STRANGER"
                     ? active.asl_revealed
-                      ? "Profile sharing available · your preferences apply"
+                      ? "ASL milestone reached · your preferences apply"
                       : "Identity hidden · get to know each other first"
                     : `${active.online} active · ${active.type === "SHARED_GROUP" ? "Room joined by link" : "Verified community"}`}
                   {isOwner && <span className="label">YOU’RE THE HOST</span>}
@@ -2393,6 +2432,7 @@ export function App() {
                         : "Say hello, be kind, and enjoy the conversation."}
                     </p>
                   </div>
+
                   {messages.map((m) => (
                     <div
                       className={`message ${m.senderId === user?.id ? "own" : ""}`}
@@ -2491,6 +2531,20 @@ export function App() {
                         </button>
                       </div>
                     ))}
+                  {active.type === "STRANGER" && user && (
+                    <QuickChatDisclosure
+                      key={active.id}
+                      userId={user.id}
+                      aslRevealed={Boolean(active.asl_revealed)}
+                      progress={active.aslProgress || []}
+                      participants={active.participants || []}
+                      sharing={active.pictureSharing}
+                      busy={busy}
+                      onDecision={(decision, pictureId) =>
+                        decidePictureSharing(active.id, decision, pictureId)
+                      }
+                    />
+                  )}
                   {typing && <p className="typing">Someone is typing…</p>}
                   <div ref={chatEnd} />
                 </div>
@@ -2968,39 +3022,25 @@ export function App() {
       </main>
       {!active && (
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          <button
-            className={mobileNavSelection === "groups" ? "selected" : ""}
-            aria-current={page === "groups" ? "page" : undefined}
-            onClick={() => choosePage("groups")}
-          >
-            <span className="mobile-nav-icon">
-              <MessageCircle size={20} />
-              {reconnectRequests.length > 0 && (
-                <b className="mobile-nav-count">{reconnectRequests.length}</b>
-              )}
-            </span>
-            <span className="mobile-nav-label">Chats</span>
-          </button>
-          <button
-            className={`mobile-nav-new ${mobileNavSelection === "newChat" ? "selected" : ""}`}
-            aria-pressed={mobileNavSelection === "newChat"}
-            onClick={() => setModal("newChat")}
-          >
-            <span className="mobile-nav-icon">
-              <Plus size={22} />
-            </span>
-            <span className="mobile-nav-label">New chat</span>
-          </button>
-          <button
-            className={mobileNavSelection === "profile" ? "selected" : ""}
-            aria-current={page === "profile" ? "page" : undefined}
-            onClick={() => choosePage("profile")}
-          >
-            <span className="mobile-nav-icon">
-              <UserRound size={20} />
-            </span>
-            <span className="mobile-nav-label">Profile</span>
-          </button>
+          {mobileTabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={page === tab.id ? "selected" : ""}
+              aria-current={page === tab.id ? "page" : undefined}
+              onClick={() => choosePage(tab.id)}
+            >
+              <span className="mobile-nav-icon">
+                {tab.icon}
+                {tab.id === "groups" && reconnectRequests.length > 0 && (
+                  <b className="mobile-nav-count">{reconnectRequests.length}</b>
+                )}
+                {tab.id === "contacts" && requests.length > 0 && (
+                  <b className="mobile-nav-count">{requests.length}</b>
+                )}
+              </span>
+              <span className="mobile-nav-label">{tab.label}</span>
+            </button>
+          ))}
         </nav>
       )}
       {calls.length > 0 && !callId && (

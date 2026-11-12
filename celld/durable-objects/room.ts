@@ -1,3 +1,8 @@
+import {
+  currentPicture,
+  pictureById,
+} from "../features/profile-pictures/state";
+import { pictureSharingDecisionSchema } from "@charoo/contracts";
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "../env";
 import { messageSchema, z } from "@charoo/contracts";
@@ -19,7 +24,7 @@ import {
   type RoomRecord,
 } from "../shared/data";
 import { encrypt, decrypt, fingerprint, meaningful } from "../shared/crypto";
-import { requireThat, result, type Result } from "../shared/errors";
+import { HttpError, requireThat, result, type Result } from "../shared/errors";
 import { sendSocket, closeSocket } from "../shared/sockets";
 import { endCall } from "../features/providers/livekit";
 type Participant = {
@@ -32,6 +37,8 @@ type Participant = {
   last_message_at: string | null;
   read_at: string | null;
   presence_until: number;
+  picture_decision?: "declined" | "approved";
+  picture_id?: string;
   removed_reason?: string | null;
   removed_at?: string | null;
 };
@@ -200,6 +207,67 @@ export class Room extends DurableObject<Env> {
     r.version++;
     this.save(r);
     this.outbox("projection", {});
+  }
+  private disclosureEligible(threshold: number) {
+    const people = this.people();
+    return (
+      this.meta().type === "STRANGER" &&
+      people.length === 2 &&
+      people.every(
+        (p) => p.state === "JOINED" && p.meaningful_count >= threshold,
+      )
+    );
+  }
+  private syncAsl() {
+    const r = this.meta();
+    const eligible = this.disclosureEligible(5);
+    if (r.type === "STRANGER" && r.asl_revealed !== eligible) {
+      this.ctx.storage.transactionSync(() => {
+        r.asl_revealed = eligible;
+        this.save(r);
+        this.changed();
+        this.event("room.changed");
+      });
+      return true;
+    }
+    return false;
+  }
+  private async pictureSharing(actor: Actor) {
+    const self = this.participant(actor.userId)!,
+      picture = await currentPicture(this.env, actor.userId);
+    const participants: { id: string; url: string }[] = [];
+    const eligible = this.disclosureEligible(10);
+    if (eligible)
+      for (const p of this.people()) {
+        if (p.picture_decision !== "approved" || !p.picture_id) continue;
+        try {
+          await user(this.env, p.user_id);
+        } catch {
+          continue;
+        }
+        const approved = await pictureById(this.env, p.picture_id);
+        if (approved?.state === "APPROVED" && approved.owner_id === p.user_id)
+          participants.push({
+            id: p.user_id,
+            url: `/api/rooms/${this.meta().id}/pictures/${p.user_id}/content?pictureId=${approved.id}`,
+          });
+      }
+    return {
+      eligible,
+      self: {
+        hasPicture: !!picture,
+        pictureId: picture?.id || null,
+        previewUrl: picture
+          ? `/api/profile/picture/content?pictureId=${picture.id}`
+          : null,
+        decision:
+          self.picture_decision === "approved" &&
+          self.picture_id !== picture?.id
+            ? "pending"
+            : self.picture_decision || "pending",
+      },
+      participants,
+    };
   }
   private async wake(retryDelay = 1000) {
     const r = this.meta(),
@@ -498,7 +566,82 @@ export class Room extends DurableObject<Env> {
       const room = await this.permit(actor, write);
       switch (kind) {
         case "snapshot":
+          if (this.syncAsl()) {
+            await this.wake();
+            await this.flush();
+          }
           return this.snapshot(actor);
+        case "picture.share": {
+          const b = pictureSharingDecisionSchema.parse(input);
+          requireThat(
+            this.disclosureEligible(10),
+            409,
+            "Picture sharing is not available yet",
+          );
+          const picture = await currentPicture(env, u.id);
+          if (b.decision === "approved")
+            requireThat(
+              picture && picture.id === b.pictureId,
+              409,
+              "Your profile picture changed. Review it before sharing.",
+            );
+          await this.permit(actor);
+          this.ctx.storage.transactionSync(() => {
+            this.membership(u.id);
+            requireThat(
+              this.disclosureEligible(10),
+              409,
+              "Picture sharing is not available yet",
+            );
+            const p = this.participant(u.id)!;
+            // Once approved, a dismissed or delayed decline cannot revoke the saved choice.
+            if (
+              p.picture_decision === "approved" &&
+              p.picture_id === picture?.id
+            )
+              return;
+            if (
+              p.picture_decision === b.decision &&
+              (b.decision !== "approved" || p.picture_id === picture?.id)
+            )
+              return;
+            p.picture_decision = b.decision;
+            if (b.decision === "approved") p.picture_id = picture!.id;
+            this.saveParticipant(p);
+            this.changed();
+            this.event(
+              b.decision === "approved" ? "picture.shared" : "room.changed",
+            );
+          });
+          await this.wake();
+          await this.flush();
+          return this.snapshot(actor);
+        }
+        case "picture.download": {
+          requireThat(this.disclosureEligible(10), 404, "Picture unavailable");
+          const p = this.participant(input.userId);
+          requireThat(
+            p?.state === "JOINED" &&
+              p.picture_decision === "approved" &&
+              p.picture_id,
+            404,
+            "Picture unavailable",
+          );
+          await user(env, p.user_id);
+          const picture = await pictureById(env, p.picture_id);
+          requireThat(
+            picture?.state === "APPROVED" && picture.owner_id === p.user_id,
+            404,
+            "Picture unavailable",
+          );
+          requireThat(
+            !input.pictureId || input.pictureId === picture.id,
+            409,
+            "Picture changed",
+          );
+          await this.permit(actor);
+          return picture;
+        }
         case "messages":
           return this.messages(actor, input.before);
         case "call.list": {
@@ -518,8 +661,7 @@ export class Room extends DurableObject<Env> {
         case "message": {
           const b = messageSchema.parse(input),
             sealed = await encrypt(b.text, env.MESSAGE_KEY, room.id),
-            fp = await fingerprint(b.text, env.MESSAGE_KEY, room.id),
-            cfg = await settings(env);
+            fp = await fingerprint(b.text, env.MESSAGE_KEY, room.id);
           const outcome = this.ctx.storage.transactionSync(() => {
             const r = this.membership(u.id, true);
             const old = this.rows(
@@ -583,17 +725,8 @@ export class Room extends DurableObject<Env> {
             p.last_message_at = at;
             this.saveParticipant(p);
             r.last_activity = at;
-            if (r.type === "STRANGER" && !r.asl_revealed) {
-              const counts = this.people().map((v) => v.meaningful_count);
-              if (
-                counts.length === 2 &&
-                counts.every((n) => n >= cfg.minimum_messages_per_user) &&
-                counts.reduce((a, b) => a + b, 0) >= cfg.asl_reveal_threshold &&
-                Date.now() - Date.parse(r.created_at) >=
-                  cfg.asl_minimum_duration_seconds * 1000
-              )
-                r.asl_revealed = true;
-            }
+            if (r.type === "STRANGER")
+              r.asl_revealed = this.disclosureEligible(5);
             this.save(r);
             this.changed();
             this.event("message", { id });
@@ -1149,6 +1282,15 @@ export class Room extends DurableObject<Env> {
           [a, b],
         ));
       }
+      if (r.type === "STRANGER" && visible) {
+        try {
+          await user(this.env, u.id);
+        } catch (error) {
+          if (error instanceof HttpError && [401, 403].includes(error.status))
+            visible = false;
+          else throw error;
+        }
+      }
       profiles.push({
         id: u.id,
         name: r.type === "STRANGER" ? "Stranger" : u.display_name,
@@ -1195,8 +1337,12 @@ export class Room extends DurableObject<Env> {
         });
       }
     }
+    const pictureSharing =
+      r.type === "STRANGER" ? await this.pictureSharing(actor) : undefined;
+    await this.permit(actor);
     return {
       ...safe,
+      pictureSharing,
       shareUrl: isHost ? await this.inviteUrl() : undefined,
       online: this.people().filter(
         (p) => p.state === "JOINED" && p.presence_until > Date.now(),

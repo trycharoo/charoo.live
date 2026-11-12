@@ -86,7 +86,7 @@ export async function exchange(
       code_verifier: verifier,
     }),
     signal: AbortSignal.timeout(10000),
-    redirect: "error",
+    redirect: "manual",
   });
   requireThat(res.ok, 503, "Google sign-in unavailable");
   const body = z.object({ id_token: z.string() }).parse(await res.json());

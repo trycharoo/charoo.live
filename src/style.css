@@ -1006,6 +1006,91 @@ dialog label {
 .chat-welcome p {
   font-size: 10px;
 }
+.quick-chat-disclosure {
+  max-width: 560px;
+  margin: 0 auto 24px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.quick-chat-disclosure p {
+  margin: 0 0 10px;
+}
+.quick-chat-disclosure p:last-child {
+  margin-bottom: 0;
+}
+.disclosure-progress,
+.picture-sharing-milestone {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.disclosure-progress > svg,
+.picture-sharing-milestone > svg {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--accent-text);
+}
+.disclosure-hint {
+  color: var(--muted);
+  font-size: 12px;
+}
+.picture-sharing-notice {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 12px;
+}
+.picture-sharing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.shared-profile-picture {
+  margin: 18px 0 0;
+}
+.shared-profile-picture figcaption {
+  margin-bottom: 10px;
+}
+.shared-profile-picture img,
+.consent-picture-preview,
+.profile-picture-preview {
+  display: block;
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+}
+.consent-picture-preview {
+  margin-bottom: 12px;
+}
+.profile-picture-settings {
+  margin: 24px 0;
+  padding: 20px;
+  max-width: 560px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  line-height: 1.6;
+}
+.profile-picture-settings > p {
+  margin: 10px 0;
+}
+.profile-picture-upload {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.profile-picture-upload input {
+  max-width: 100%;
+}
+.profile-picture-upload small {
+  color: var(--muted);
+}
 .message {
   max-width: 80%;
   width: fit-content;
@@ -4858,5 +4943,328 @@ h3 {
   }
   .new-chat-dialog {
     padding: 18px 22px max(24px, env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Responsive polish: mobile-first navigation, tablet layouts, and safe touch targets. */
+html,
+body {
+  overflow-x: clip;
+}
+
+.app,
+main {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+img,
+video,
+canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+.shared-profile-picture img,
+.consent-picture-preview,
+.profile-picture-preview {
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.quick-chat-disclosure,
+.profile-picture-settings {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 961px) and (max-width: 1200px) {
+  .sidebar.room-sidebar {
+    width: 310px;
+  }
+}
+
+@media (max-width: 960px) {
+  .new-chat-trigger {
+    display: inline-flex;
+  }
+  .video-grid {
+    grid-template-columns: 1fr;
+  }
+  .profile-status {
+    flex-wrap: wrap;
+  }
+  .admin-bar {
+    flex-wrap: wrap;
+  }
+  .chat-layout {
+    min-width: 0;
+  }
+  .chat-main {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .new-chat-trigger {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+    line-height: 0;
+  }
+  .new-chat-trigger svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .inbox-create {
+    display: inline-flex;
+    min-height: 44px;
+  }
+  .mobile-nav {
+    gap: 4px;
+    padding: 6px 4px;
+  }
+  .mobile-nav button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 2px;
+    font-size: 9px;
+  }
+  .mobile-nav-label {
+    font-size: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+  .chat-head {
+    align-items: flex-start;
+  }
+  .chat-head > div {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .chat-head > .room-invite-button,
+  .chat-head > .room-leave-button,
+  .chat-head > .chat-back-button {
+    flex: 1 1 0;
+    min-height: 44px;
+    white-space: nowrap;
+  }
+  .conversation-row {
+    flex-wrap: nowrap;
+  }
+  .conversation-copy {
+    min-width: 0;
+  }
+  .conversation-presence {
+    flex-shrink: 0;
+  }
+  .past-chat-row {
+    flex-wrap: wrap;
+  }
+  .past-chat-reconnect {
+    flex: 1 1 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+  .profile-status {
+    gap: 14px;
+  }
+  .message-tools button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .join-request-actions {
+    flex-wrap: wrap;
+  }
+  .join-request-actions .button,
+  .join-request-actions .member-action {
+    flex: 1 1 140px;
+    min-height: 44px;
+  }
+  .admin-bar {
+    gap: 10px;
+  }
+  .reconnect-notice {
+    flex-wrap: wrap;
+  }
+  .video-grid video {
+    aspect-ratio: 4 / 3;
+    background: #000;
+  }
+  .call-invite {
+    gap: 10px;
+  }
+  .call-invite .button {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 420px) {
+  .conversation-presence {
+    display: none;
+  }
+  .room-meta {
+    flex-wrap: wrap;
+  }
+  .filters {
+    flex-direction: column;
+  }
+  .filters .search,
+  .filters select {
+    width: 100%;
+  }
+  .chat-shortcuts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Quick-chat disclosure and private picture controls share the chat's scroll area. */
+.quick-chat-disclosure,
+.profile-picture-settings {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.picture-sharing-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px 16px;
+}
+.picture-sharing-choice > .consent-picture-preview {
+  grid-row: span 2;
+  margin: 0;
+}
+.picture-sharing-choice > p,
+.picture-sharing-choice > .picture-sharing-actions {
+  grid-column: 2;
+  margin: 0;
+}
+.picture-sharing-choice:not(:has(.consent-picture-preview)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.picture-sharing-choice:not(:has(.consent-picture-preview)) > * {
+  grid-column: 1;
+}
+.picture-sharing-actions .button,
+.profile-picture-settings .button {
+  min-height: 44px;
+  max-width: 100%;
+  white-space: normal;
+}
+.consent-picture-preview {
+  width: 112px;
+  height: 112px;
+  max-width: 100%;
+  object-fit: contain;
+  background: var(--panel);
+}
+.shared-profile-picture img,
+.profile-picture-preview {
+  width: auto;
+  height: auto;
+  aspect-ratio: auto;
+  max-width: min(100%, 240px);
+  max-height: 240px;
+  object-fit: contain;
+  background: var(--panel);
+}
+.profile-picture-upload,
+.profile-picture-upload input {
+  width: 100%;
+  min-width: 0;
+}
+.profile-picture-upload input {
+  min-height: 44px;
+  font-size: 16px;
+}
+.profile-picture-upload input::file-selector-button {
+  min-height: 44px;
+  max-width: 100%;
+  margin-right: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.chat-head,
+.composer {
+  flex-shrink: 0;
+}
+@media (max-width: 480px) {
+  .quick-chat-disclosure {
+    padding: 14px;
+    font-size: 13px;
+  }
+  .picture-sharing-choice {
+    gap: 12px;
+  }
+  .picture-sharing-choice > .consent-picture-preview {
+    width: 80px;
+    height: 80px;
+    grid-row: 1;
+  }
+  .picture-sharing-choice > .picture-sharing-actions {
+    grid-column: 1 / -1;
+  }
+  .picture-sharing-actions .button {
+    flex: 1 1 auto;
+  }
+  .profile-picture-settings {
+    padding: 16px;
+  }
+}
+@media (max-width: 360px) {
+  .picture-sharing-actions .button {
+    flex-basis: 100%;
+  }
+}
+@media (max-width: 960px) and (max-height: 500px) and (orientation: landscape) {
+  .chat-head {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px 16px;
+  }
+  .chat-head > div {
+    flex: 1;
+  }
+  .chat-head > .room-leave-button {
+    flex: 0 0 auto;
+  }
+  .messages {
+    padding: 16px max(16px, env(safe-area-inset-right)) 16px
+      max(16px, env(safe-area-inset-left));
+  }
+  .chat-welcome {
+    margin: 0 0 16px;
+    padding: 12px;
+  }
+  .composer {
+    padding: 8px max(16px, env(safe-area-inset-right))
+      max(8px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+}
+@media (max-width: 640px) {
+  .chat:has(.quick-chat-disclosure) .chat-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+  .chat:has(.quick-chat-disclosure) .chat-head > .button {
+    padding: 8px 10px;
+    font-size: 11px;
   }
 }

@@ -19,7 +19,7 @@ export async function mail(env: Env, email: string, url: string) {
           Text: text,
         }),
         signal: AbortSignal.timeout(10000),
-        redirect: "error",
+        redirect: "manual",
       },
       "Email temporarily unavailable",
     );
@@ -47,7 +47,7 @@ export async function mail(env: Env, email: string, url: string) {
         text,
       }),
       signal: AbortSignal.timeout(10000),
-      redirect: "error",
+      redirect: "manual",
     },
     "Email temporarily unavailable",
   );

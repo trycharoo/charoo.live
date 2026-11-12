@@ -5,7 +5,7 @@ Initialized **2026-11-12** from the supplied Guardian SRS template, adapted to t
 | Field | Baseline |
 |---|---|
 | Product | Temporary conversations, shared rooms and persistent contacts |
-| Documentation scope | Repository skill/workflow setup; subsequent FR-12 quick-chat disclosure requirements only |
+| Documentation scope | Repository skill/workflow setup; subsequent FR-12 quick-chat disclosure requirements and authorized implementation |
 | Source examined | `8de390733d421b78f71aaf1f30974ba0f7382c65`; setup edits described in the handoff |
 | Requirements and flags | [SRS status and scope](../../SRS.md#status-and-scope); retain its presence, configuration, target, policy, gap and issue distinctions |
 | Architecture | [ARCHITECTURE.md](../../ARCHITECTURE.md), [SRS decisions](../../SRS.md#architecture-decisions), [decision log](ARCHITECTURE_DECISIONS.md) |
@@ -19,7 +19,7 @@ Confirmed product scope is in [SRS functional requirements](../../SRS.md#functio
 
 The [end-to-end flows](../../SRS.md#end-to-end-application-flows) cover entry/authentication, room creation/joining, authorized messaging, matching/relationships, moderation and expiry. Providers and flags gate discovery, email, Google, uploads, video and assistant functionality (FR-03, FR-09). Reconnect creation/acceptance is unavailable (FR-06 / GAP-01); consent is not verified age or identity (FR-01).
 
-The initial skill setup authorized no application changes. The subsequent user request approves the **FR-12 target requirements** for quick-chat ASL and voluntary profile-picture reveal; it requests documentation only, not implementation, deployment, migration or runtime configuration changes.
+The initial skill setup and FR-12 specification update were documentation only. The subsequent user request explicitly authorizes implementing FR-12 locally across source, contracts, migration, UI and tests. No remote migration, deployment, push or PR publication is part of that request.
 
 ## Requirements, invariants and acceptance criteria
 
@@ -35,7 +35,7 @@ Use the exact requirement text/status in the SRS. These checks restate existing 
 | FR-09 | Given an unconfigured provider or disabled feature, return explicit unavailability. When enabled, enforce scanner capabilities, call consent and history-free assistant requests. IMP-02 remains open. |
 | FR-10 | Given an expired resource before cleanup runs, authorization rejects expired access; cleanup follows retention/anonymization rules. IMP-04 remains open. |
 | FR-11 | Changed flows need usable mobile/desktop, keyboard/focus, loading/error/retry states and preservation of navigation intent. This is a target; IMP-05–IMP-08 remain open. |
-| FR-12 | [Quick-chat milestones](../../SRS.md#quick-chat-disclosure-milestones-fr-12): at least five qualifying messages **each** make permitted ASL eligible; at least ten **each** notify both and prompt owners with pictures. Only an owner's approval reveals their own picture. Decline/dismissal keeps it hidden with a share-later chat notice/action. Target only; not implemented. |
+| FR-12 | [Quick-chat milestones](../../SRS.md#quick-chat-disclosure-milestones-fr-12): at least five qualifying messages **each** make permitted ASL eligible; at least ten **each** notify both and prompt owners with pictures. Only an owner's approval reveals their own picture. Decline/dismissal keeps it hidden with a share-later chat notice/action. Implemented locally with private account pictures and room-scoped consent; uploads require configured scanning. See the matrix for verification limits. |
 | BE-01–BE-07 | [Backend requirements](../../SRS.md#backend-requirements-and-ownership): authoritative access checks, transactional state/outbox commits, recovery, confidentiality, boundary security, media safety and persistence evolution. |
 | AD-01–AD-05 | [Architecture decisions](../../SRS.md#architecture-decisions): REST/WebSocket split, justified timers, separate runtime configurations and proportionate changes. |
 
@@ -73,7 +73,7 @@ Use the [SRS command matrix](../../SRS.md#validation-and-operation). Available t
 
 [IMPLEMENTATION_REVIEW.md](../IMPLEMENTATION_REVIEW.md) retains IMP-01–IMP-11 and GAP-01. This setup neither reruns their reproductions nor fixes them. Live providers/deployments, multi-node recovery, SLOs and full UI/authorization coverage remain unverified at this assessment level.
 
-The FR-12 follow-up inspected current message counters, ASL settings/snapshots, profile schema/UI and the existing balanced-participation test. Current ASL defaults are ten each, twenty total and a 120-second wait; the new count-based five-each target supersedes those gates for future quick-chat disclosure while retaining meaningful-message and visibility rules. The ten-each profile-picture consent/notification flow is absent. See [PD-01](ARCHITECTURE_DECISIONS.md#pd-01-quick-chat-disclosure-requires-balanced-participation-and-owner-consent); no application tests ran for this requirements-only update.
+The authorized FR-12 implementation uses fixed five-each ASL and ten-each picture-sharing milestones while retaining meaningful-message qualification and ASL preferences. AppCoordinator now owns private scanned profile-picture storage; Room persists per-owner consent to a specific picture and enforces private retrieval. Legacy threshold/duration settings do not gate quick-chat disclosure. See [PD-01](ARCHITECTURE_DECISIONS.md#pd-01-quick-chat-disclosure-requires-balanced-participation-and-owner-consent), [ADR-01](ARCHITECTURE_DECISIONS.md#adr-01-private-account-pictures-with-room-scoped-disclosure-consent), and the [implementation matrix](IMPLEMENTATION_MATRIX.md#fr-12-implementation) for executed checks and deployment limits.
 
 **Confirmed versus inferred:** the linked SRS is the existing requirements baseline; inspected source/configuration supplies implementation observations; module responsibilities summarized here are engineering interpretations of those paths. Proposed fixes and future measurements are recommendations, not approved work.
 
