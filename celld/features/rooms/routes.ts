@@ -183,7 +183,6 @@ export function roomRoutes(app: Hono<HttpEnv>) {
     c.json(await command(c, "invite")),
   );
   app.post("/api/rooms/:roomId/messages", body(messageSchema), async (c) => {
-    await userRate(c, "message", 40, 60, "Message limit reached");
     return c.json(await command(c, "message"), 201);
   });
   app.post("/api/rooms/:roomId/read", async (c) => {
