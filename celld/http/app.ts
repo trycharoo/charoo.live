@@ -31,6 +31,10 @@ import {
   scanRequest,
   boundedBody,
 } from "../features/media/routes";
+import {
+  pictureRoutes,
+  pictureScanRequest,
+} from "../features/profile-pictures/routes";
 import { providerRoutes } from "../features/providers/routes";
 
 export const app = new Hono<HttpEnv>();
@@ -40,7 +44,11 @@ app.use("*", async (c, next) => {
   c.header("Cache-Control", "no-store");
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "same-origin");
-  if (/^\/api\/media\/[^/]+\/scan\/[^/]+\/(input|output)$/.test(c.req.path))
+  if (
+    /^\/api\/(media\/[^/]+|profile\/picture\/[^/]+)\/scan\/[^/]+\/(input|output)$/.test(
+      c.req.path,
+    )
+  )
     return next();
   const origin = c.req.header("Origin");
   // Local admin tools may omit a session and browser origin. A trusted
@@ -167,6 +175,11 @@ roomRoutes(app);
 socialRoutes(app);
 adminRoutes(app);
 mediaRoutes(app);
+pictureRoutes(app);
+app.all(
+  "/api/profile/picture/:id/scan/:attempt/:operation",
+  pictureScanRequest,
+);
 providerRoutes(app);
 app.all("/api/media/:id/scan/:attempt/:operation", scanRequest);
 app.notFound((c) =>

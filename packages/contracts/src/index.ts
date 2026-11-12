@@ -168,8 +168,8 @@ export const defaultSettings = {
   shared_room_retention_hours: 24,
   conversation_retention_hours: 24,
   available_room_creation_limit: 3,
-  asl_reveal_threshold: 20,
-  minimum_messages_per_user: 10,
+  asl_reveal_threshold: 10,
+  minimum_messages_per_user: 5,
   asl_minimum_duration_seconds: 120,
   available_room_slow_mode: 2,
   upload_size_limit_mb: 10,
@@ -200,3 +200,8 @@ export const settingsSchema = z.object({
 });
 export type Settings = typeof defaultSettings;
 export { z };
+
+export const pictureSharingDecisionSchema = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("approved"), pictureId: z.string().uuid() }),
+  z.object({ decision: z.literal("declined") }),
+]);

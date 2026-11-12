@@ -1,3 +1,8 @@
+import {
+  pictureCommand,
+  pictureScanAccess,
+  cleanupPictures,
+} from "../features/profile-pictures/state";
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "../env";
 import {
@@ -50,6 +55,15 @@ export class AppCoordinator extends DurableObject<Env> {
         const env = this.env;
         const u =
           actor && kind !== "verify" ? await authenticate(env, actor) : null;
+        if (kind.startsWith("picture.")) {
+          requireThat(u && actor, 401, "Sign in to continue");
+          try {
+            return await pictureCommand(env, actor, kind, input);
+          } finally {
+            if (!["picture.current", "picture.download"].includes(kind))
+              await this.ctx.storage.setAlarm(Date.now() + 1000);
+          }
+        }
         switch (kind) {
           case "guest": {
             const b = guestSchema.parse(input);
@@ -390,7 +404,7 @@ export class AppCoordinator extends DurableObject<Env> {
                         ? cfg.available_room_retention_hours
                         : cfg.shared_room_retention_hours,
                     ) *
-                    3600000,
+                      3600000,
                 );
             const record = this.roomRecord(id, b.type, u.id, {
               title: b.title,
@@ -1008,6 +1022,9 @@ export class AppCoordinator extends DurableObject<Env> {
         await this.ctx.storage.setAlarm(Date.now() + 1000);
         return;
       }
+      case "object.delete":
+        await env.MEDIA.delete(b.key);
+        break;
       case "room.close":
         await roomStub(env, b.roomId).closeInternal(b.actorId);
         break;
@@ -1053,9 +1070,15 @@ export class AppCoordinator extends DurableObject<Env> {
     if (await first(this.env, "SELECT 1 FROM app_outbox LIMIT 1"))
       await this.ctx.storage.setAlarm(Date.now() + 60000);
   }
+  async pictureScanAccess(id: string, attempt: string, operation: string) {
+    return this.ctx.blockConcurrencyWhile(() =>
+      result(() => pictureScanAccess(this.env, id, attempt, operation)),
+    );
+  }
   async cleanup() {
     const env = this.env;
     await this.ctx.blockConcurrencyWhile(async () => {
+      await cleanupPictures(env);
       await env.DB.batch([
         stmt(env, "DELETE FROM sessions WHERE expires_at<=?", [iso()]),
         stmt(env, "DELETE FROM quick_chat_archives WHERE expires_at<=?", [
@@ -1071,7 +1094,7 @@ export class AppCoordinator extends DurableObject<Env> {
       ]);
       const expired = await all(
         env,
-        "SELECT u.id FROM users u WHERE verified=0 AND guest_expires_at<=? AND NOT EXISTS(SELECT 1 FROM room_index r WHERE r.creator_id=u.id) AND NOT EXISTS(SELECT 1 FROM membership_index p WHERE p.user_id=u.id) AND NOT EXISTS(SELECT 1 FROM operations o,json_each(o.payload,'$.members') m WHERE o.state='PENDING' AND m.value=u.id) LIMIT 50",
+        "SELECT u.id FROM users u WHERE verified=0 AND guest_expires_at<=? AND NOT EXISTS(SELECT 1 FROM profile_pictures p WHERE p.owner_id=u.id) AND NOT EXISTS(SELECT 1 FROM room_index r WHERE r.creator_id=u.id) AND NOT EXISTS(SELECT 1 FROM membership_index p WHERE p.user_id=u.id) AND NOT EXISTS(SELECT 1 FROM operations o,json_each(o.payload,'$.members') m WHERE o.state='PENDING' AND m.value=u.id) LIMIT 50",
         [iso()],
       );
       for (const g of expired)

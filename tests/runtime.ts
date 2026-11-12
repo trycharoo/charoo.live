@@ -154,6 +154,8 @@ export async function fixture() {
     },
     MEDIA: {
       put: async (key: string, bytes: Uint8Array, options: any) => {
+        if (options?.onlyIf?.etagDoesNotMatch === "*" && media.has(key))
+          return null;
         media.set(key, { bytes, mime: options?.httpMetadata?.contentType });
       },
       delete: async (key: string) => {

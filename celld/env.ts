@@ -48,7 +48,13 @@ type RoomClient = Pick<
 >;
 type AppClient = Pick<
   AppCoordinator,
-  "ready" | "command" | "recoverRoom" | "reserveMatch" | "deliver" | "cleanup"
+  | "pictureScanAccess"
+  | "ready"
+  | "command"
+  | "recoverRoom"
+  | "reserveMatch"
+  | "deliver"
+  | "cleanup"
 >;
 type MatcherClient = Pick<
   Matcher,
