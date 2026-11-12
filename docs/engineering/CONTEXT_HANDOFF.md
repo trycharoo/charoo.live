@@ -1,58 +1,45 @@
 # Charoo shared engineering handoff
 
-Sanitized shared milestone summary, adapted from the Guardian template. This is history and a resume guide, not proof of current live state. Per-agent task checkpoints remain required under `.context/handoffs/` using [the existing template](../HANDOFF_TEMPLATE.md); the coordinating agent owns this shared summary during parallel work.
+Sanitized milestone summary; verify actual repository and external state before acting. Per-agent checkpoints remain required under `.context/handoffs/` using [the existing template](../HANDOFF_TEMPLATE.md); the coordinating agent owns this shared summary.
 
-| Field | Setup snapshot |
-|---|---|
-| Updated | 2026-11-12, 07:18 UTC; pre-publication snapshot |
+| Field | Latest requirements milestone |
+| --- | --- |
+| Updated | 2026-11-12 08:02 UTC; pre-publication snapshot |
 | Repository / workspace | Charoo / `oslo` |
 | Branch / target | `dJangg0/engineering-srs-guardian` / `origin/main` |
-| Examined HEAD | `8de390733d421b78f71aaf1f30974ba0f7382c65` |
-| Objective | Install Engineering SRS Guardian and initialize a reusable workflow without application changes |
-| State | Setup complete and validated; preparing one commit and one PR against main under the subsequent user request. Recheck actual branch/PR state on resume |
-| Product contract | [SRS.md](../../SRS.md), baseline dated 2026-11-12 |
-| Environment | Local Conductor workspace, Codex 0.166.0; no application runtime started |
+| Examined HEAD | `a7898a6b0c0050f88061e10b2f06f0d0fb3414ed` |
+| Objective | Document quick-chat ASL/picture milestones and owner consent in the SRS; no feature implementation |
+| State | Requirements update complete and validated; subsequent user request authorizes committing and pushing these edits to the current branch |
+| Earlier publication | Guardian setup committed/pushed as `a7898a6` and [PR #12](https://github.com/trycharoo/charoo.live/pull/12) created against main; no merge claimed, remote PR status not rechecked for this SRS follow-up |
 
-## Intent, decisions and invariants
+## Product intent and approved decisions
 
-The user authorized repository setup/validation and a read-only initial engineering assessment. The subsequent user request explicitly authorizes committing, pushing this feature branch and opening one PR against main. Application feature work, redesign, dependencies, runtime configuration changes, deployment, direct protected-branch pushes and merges remain outside this task. The existing branch is preserved.
+Root [SRS.md](../../SRS.md) remains canonical; [PROJECT_SRS.md](PROJECT_SRS.md) supplies navigation and [the matrix](IMPLEMENTATION_MATRIX.md) records implementation evidence. Existing FR/BE/AD IDs and IMP-01–IMP-11 / GAP-01 remain intact.
 
-Root `SRS.md` remains canonical with stable FR/BE/AD IDs. [PROJECT_SRS.md](PROJECT_SRS.md) supplies navigation, acceptance guidance and the source-backed assessment; [ARCHITECTURE_DECISIONS.md](ARCHITECTURE_DECISIONS.md) indexes AD-01–AD-05 and records ENG-01 for this tooling integration.
+The latest user request approves **FR-12 as requirements only**: five qualifying messages from each participant unlock permitted ASL; ten from each notify both that picture sharing is available and prompt owners with pictures. Each owner independently chooses whether to reveal their own picture. Decline/dismissal keeps it hidden with a share-later chat notice/action. A combined total never substitutes for either person's contribution. Here “profile” is interpreted as profile picture, as framed by the request.
 
-Preserve authoritative Room/AppCoordinator ownership, D1 indexes as query aids, authenticated REST/WebSocket contracts, durable operation IDs/outboxes, backend encryption/key continuity, append-only migrations and separate Cloudflare/Celld targets. Keep credentials and private content out of both shared and private handoffs.
+[PD-01](ARCHITECTURE_DECISIONS.md#pd-01-quick-chat-disclosure-requires-balanced-participation-and-owner-consent) records this product decision, not a selected implementation design. Preserve meaningful-message qualification and ASL visibility. Target milestones have no additional legacy room-age wait. Consent is scoped to the current chat, never implied by silence or reciprocal sharing, and cannot bypass blocks, expiry or authorization.
 
-## Implemented changes and evidence
+Preserve existing authoritative ownership, REST/WebSocket boundaries, durable IDs/outboxes, encryption, private media and migration history. No feature, API, schema, runtime configuration, migration or deployment is authorized by this documentation request.
 
-- Installed `.agents/skills/engineering-srs-guardian/`: skill, metadata, three functional references and five original templates. Added a generic canonical-document/checkpoint note; adapted README and omitted optional product filtering. Excluded only macOS metadata and an unreferenced scaffold reference.
-- Extended `AGENTS.md` with Guardian usage, cross-layer review, traceability/documentation and coordinated shared summaries. Preserved every existing instruction; per-agent checkpoints remain required.
-- Added README discovery/invocation guidance and these four engineering documents, including [the matrix](IMPLEMENTATION_MATRIX.md) mapping all 23 FR/BE/AD entries and all 12 existing findings.
-- Inspected source, contracts, tests/configuration and CI to initialize evidence. No application behavior or known defect was changed. New files are local branch work, not merged or deployed artifacts.
+## Changes and source evidence
 
-## Verification
+- Added FR-12, detailed milestone/consent rules and acceptance cases to `SRS.md`; linked it from FR-07.
+- Updated the requirements index, matrix and decision log to distinguish the approved target from current implementation; refreshed this handoff.
+- Source inspection: Room already counts qualifying distinct messages and enforces ASL visibility. Defaults currently require 10 each, 20 total and 120 seconds. Existing balanced-ASL test uses lowered settings; it does not prove the new milestones. Profile schema/UI lacks profile pictures and reveal consent/notifications.
+- No application code, test, API, migration, dependency or configuration changed. The target is not implemented or deployed. Existing defects were neither fixed nor reproduced again.
 
-| Check | Result / limit |
-|---|---|
-| Local Codex `skills/list`, forced reload | PASS: `engineering-srs-guardian`, repository scope, enabled, expected path/UI metadata and no matching errors; initialize/list only, no model/thread call |
-| Bundled `quick_validate.py` | PASS via existing Ruby YAML/JSON adapter; direct system Python invocation unavailable because PyYAML is absent. No dependencies installed |
-| Local references | PASS: 320 local Markdown links, including heading/line anchors, resolve |
-| Matrix IDs/findings | PASS: 23 unique FR/BE/AD entries and all IMP-01–IMP-11 / GAP-01 retained; no whole requirement certified complete |
-| Functional package / original instructions | PASS: 11 installed files; all eight references/templates byte-identical; only SKILL.md, metadata and package README adapted as documented. Every original AGENTS.md and root README line retained in order |
-| Documentation-only scope / whitespace | PASS: 17 new/modified files, limited to AGENTS.md, README.md, skill package and engineering docs; no application/config/dependency changes. New and modified files pass whitespace checks |
-| `git diff --check` | PASS on final setup diff |
-| `pnpm check`, browser/native suites, Cloudflare build/dry-run, live integrations | NOT RUN: documentation/skill-only change. Historical application results remain attributed to the existing review, not this session |
+## Verification and limits
 
-The discovery probe and validation artifacts are ignored under `.context/`, so future workspaces may not contain them. Discovery was confirmed in this installed Codex harness, not every Conductor agent. Official behavior and fallback instructions are in the [skill README](../../.agents/skills/engineering-srs-guardian/README.md).
+- PASS: all 358 local links/anchors across the five changed documents resolve; original 23 FR/BE/AD IDs plus FR-12 match 24 unique matrix rows; all existing findings retained; milestone/consent acceptance cases present; documentation-only scope, whitespace and `git diff --check` pass. Independent review found no actionable issues.
+- Current application behavior: relevant source/test definitions inspected only; no application tests or services run for this requirements-only edit.
+- Earlier Guardian setup evidence remains historical: actual Codex discovery/validator, original package/instruction preservation, 23 baseline IDs / 12 findings, 320 baseline links and whitespace checks passed. FR-12 adds one target ID; old counts are setup evidence, not a claim about this updated document set.
+- SLOs, live providers, Cloudflare parity and complete accessibility acceptance remain unverified. Picture storage/schema, consent operations/notifications and any future unshare control require separate implementation decisions.
 
-## Open issues and uncertainty
+## External state and next action
 
-All IMP-01–IMP-11 and GAP-01 remain open in [IMPLEMENTATION_REVIEW.md](../IMPLEMENTATION_REVIEW.md). Their reproductions were not rerun in this setup. The [matrix](IMPLEMENTATION_MATRIX.md) distinguishes source observations, historical findings, conditional integrations and unverified acceptance. Numeric SLOs, full accessibility acceptance, live providers/deployments and Cloudflare parity are not established by this assessment.
+No external mutations were performed during the SRS editing step. The subsequent user request explicitly authorizes committing and pushing all pending changes; the existing PR #12 was confirmed open on this branch before publication. Recheck actual commit/upstream state before retrying publication; do not create a duplicate PR. No deployment or migration is authorized.
 
-At this pre-publication snapshot, no deployment, migration, resource creation, dependency install, push or merge was performed. Temporary skill-listing processes exited; no application service was started. Check the actual remote branch and PR before retrying publication.
+The requirements update is complete; finish the subsequently requested commit/push and verify a clean working tree and synchronized upstream. No feature implementation is part of this request. A later authorized implementation must satisfy FR-12 acceptance cases, update relevant source/contracts/tests and reconcile defaults with the new target.
 
-## Next action and resume procedure
-
-Complete the requested single-PR publication through the normal commit/PR workflow; no implementation work remains for this setup. Verify remote branch/PR state before retrying publication. A completed setup does not request feature work or fixes to the findings. Once integrated into the starting branch, future workspaces can inherit the tracked skill and workflow; ignored checkpoints need explicit transfer.
-
-For a future task, read `AGENTS.md`, the relevant `SRS.md` sections, this summary, the decision log and matrix, then the matching task checkpoint if continuing unfinished work. Verify `pwd`, branch/HEAD, `git status`, relevant diff/source/tests and required services. Inspect actual external state before retrying any recorded mutation. Preserve current user steering and authorization; do not trust stale `DONE`, SHA, PR, process or deployment claims.
-
-Refresh this shared file at meaningful milestones and handoffs with concise facts, checks/limits and the next action. Keep detailed working state in each agent's private checkpoint. A Markdown handoff cannot reset a chat or determine an exact remaining context budget.
+On resume, read `AGENTS.md`, relevant SRS sections, this summary and the matching private checkpoint. Recheck `pwd`, branch/HEAD, `git status`, relevant diff/source and any needed services/remote state. Completed setup history is not a new task, and a handoff cannot reset a conversation or prove current deployment behavior.
