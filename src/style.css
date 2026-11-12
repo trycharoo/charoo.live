@@ -3430,12 +3430,34 @@ select {
   width: 190px;
   height: 190px;
 }
+.match-search-scene::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: match-spin 9s linear infinite;
+  pointer-events: none;
+}
+.match-search-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 50% 0%,
+    var(--accent) 0 4px,
+    transparent 5px
+  );
+  animation: match-spin 5.5s linear infinite reverse;
+  pointer-events: none;
+}
 .match-globe {
   position: absolute;
   inset: 14px;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
-  border-radius: 4px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--accent-soft) 78%, var(--panel));
   box-shadow:
     inset -20px -8px 30px color-mix(in srgb, var(--bg) 36%, transparent),
@@ -3458,7 +3480,7 @@ select {
   position: absolute;
   display: block;
   border: 1px solid color-mix(in srgb, var(--text) 16%, transparent);
-  border-radius: 4px;
+  border-radius: 50%;
   pointer-events: none;
 }
 .match-globe-latitude.one {
@@ -3482,7 +3504,7 @@ select {
 .match-globe-shine {
   position: absolute;
   inset: 0;
-  border-radius: 4px;
+  border-radius: 50%;
   background: conic-gradient(
     from 215deg,
     transparent 0deg 224deg,
@@ -3490,7 +3512,7 @@ select {
     transparent 312deg 360deg
   );
   mix-blend-mode: screen;
-  animation: match-scan 4.4s linear infinite;
+  animation: match-spin 4.4s linear infinite;
 }
 .match-location {
   position: absolute;
@@ -3498,7 +3520,7 @@ select {
   width: 7px;
   height: 7px;
   border: 1px solid var(--panel);
-  border-radius: 4px;
+  border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
   animation: match-location-pulse 2.2s ease-out infinite;
@@ -3527,7 +3549,7 @@ select {
   height: 46px;
   place-items: center;
   border: 2px solid color-mix(in srgb, var(--accent) 80%, var(--text));
-  border-radius: 4px;
+  border-radius: 50%;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--accent-text);
   box-shadow:
@@ -3535,14 +3557,14 @@ select {
     inset 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
   animation: match-search-pass 3.8s var(--ease-out) infinite;
 }
+@keyframes match-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 @keyframes match-globe-roll {
   to {
     transform: translateX(-50%);
-  }
-}
-@keyframes match-scan {
-  to {
-    transform: rotate(360deg);
   }
 }
 @keyframes match-location-pulse {
