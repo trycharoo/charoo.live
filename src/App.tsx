@@ -43,6 +43,9 @@ import {
   Globe,
   Radio,
   Palette,
+  Archive,
+  Coffee,
+  Smile,
 } from "lucide-react";
 import {
   categories,
@@ -98,6 +101,54 @@ function Modal({
 }
 const field = (form: HTMLFormElement, name: string) =>
   String(new FormData(form).get(name) || "");
+function ConversationPreview() {
+  return (
+    <div className="conversation-preview" aria-hidden="true">
+      <div className="preview-room-heading">
+        <span className="preview-room-icon">
+          <Coffee size={20} />
+        </span>
+        <div>
+          <strong>The little coffee corner</strong>
+          <small>A room for a good catch-up</small>
+        </div>
+        <span className="preview-online">
+          <i /> Live
+        </span>
+      </div>
+      <div className="preview-chat-line">
+        <span className="preview-person peach">J</span>
+        <div>
+          <small>Jamie</small>
+          <p>Anyone else taking a coffee break?</p>
+        </div>
+      </div>
+      <div className="preview-chat-line reply">
+        <div>
+          <small>You</small>
+          <p>
+            Perfect timing. Just made a cup <Coffee size={14} />
+          </p>
+        </div>
+      </div>
+      <div className="preview-chat-line">
+        <span className="preview-person lilac">A</span>
+        <div>
+          <small>Alex</small>
+          <p>Okay, this is my kind of room.</p>
+        </div>
+      </div>
+      <div className="preview-room-footer">
+        <span className="preview-typing">
+          <i />
+          <i />
+          <i />
+        </span>{" "}
+        A new conversation is just a hello away.
+      </div>
+    </div>
+  );
+}
 const profileFromForm = (
   form: HTMLFormElement,
   previous?: Profile,
@@ -1238,7 +1289,9 @@ export function App() {
               </span>
               charoo<span className="brand-dot">.</span>
             </a>
-            <div className="sidebar-caption">A LINK. A ROOM. YOUR PEOPLE.</div>
+            <div className="sidebar-caption">
+              A little space for good company.
+            </div>
             <nav aria-label="Main navigation">
               {nav.map(([p, label, icon]) => (
                 <button
@@ -1262,7 +1315,7 @@ export function App() {
               </button>
             </nav>
             <div className="sidebar-rooms">
-              <div className="eyebrow">ACTIVE CONVERSATIONS</div>
+              <div className="eyebrow">YOUR CONVERSATIONS</div>
               {conversations.slice(0, 7).map((r) => (
                 <button
                   key={r.id}
@@ -1361,7 +1414,13 @@ export function App() {
             </a>
           </div>
           <div className="breadcrumb">
-            LESS SETUP, MORE CONVERSATION <span>✦</span>
+            <MessageCircle size={17} /> <span>Your space</span>
+            <span className="breadcrumb-divider">/</span>
+            <strong>
+              {active
+                ? "Conversation"
+                : nav.find(([p]) => p === page)?.[1] || "Charoo"}
+            </strong>
           </div>
           <div className="header-actions">
             <button
@@ -1743,17 +1802,99 @@ export function App() {
         {!active && page === "groups" && (
           <section className="chat-home">
             <div className="inbox-heading">
-              <h1>
-                Chats<span className="accent">.</span>
-              </h1>
+              <div>
+                <span className="eyebrow">
+                  {user
+                    ? `WELCOME BACK, ${user.displayName.split(" ")[0]}`
+                    : "MAKE YOURSELF AT HOME"}
+                </span>
+                <h1>
+                  Your chats<span className="accent">.</span>
+                </h1>
+                <p>A familiar face. A fresh hello. It all starts here.</p>
+              </div>
               <button
-                className="button small inbox-create"
+                className="button secondary small inbox-create"
                 onClick={() => setModal("newChat")}
               >
                 <Plus size={16} /> New chat
               </button>
             </div>
-
+            <section className="welcome-card" aria-label="Start a conversation">
+              <div className="welcome-copy">
+                <span className="welcome-label">
+                  <span className="live-dot" /> GOOD COMPANY IS ONE LINK AWAY
+                </span>
+                <h2>
+                  Small talk.
+                  <br />
+                  <em>Real connection.</em>
+                </h2>
+                <p>
+                  A room for your people, or someone you haven’t met yet. Drop
+                  in, be yourself, and see where it goes.
+                </p>
+                <button
+                  className="button"
+                  onClick={
+                    hasRoomInvite
+                      ? () => setModal(user ? "joinProfile" : "guest")
+                      : startSharedRoom
+                  }
+                >
+                  <Plus size={17} />
+                  {hasRoomInvite ? "Join this room" : "Start a room"}
+                  <ArrowUpRight size={17} />
+                </button>
+                <span className="welcome-note">
+                  <Shield size={13} /> Your room. Your people. Your pace.
+                </span>
+              </div>
+              <ConversationPreview />
+            </section>
+            <div className="chat-shortcuts" aria-label="Ways to connect">
+              <button onClick={() => choosePage("strangers")}>
+                <span className="shortcut-icon">
+                  <Shuffle size={20} />
+                </span>
+                <span>
+                  <strong>Meet someone new</strong>
+                  <small>One hello can go a long way.</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </button>
+              <button onClick={openJoinRoom}>
+                <span className="shortcut-icon warm">
+                  <Link size={20} />
+                </span>
+                <span>
+                  <strong>Have an invite?</strong>
+                  <small>Join your people with a link.</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </button>
+              <button onClick={() => choosePage("tonight")}>
+                <span className="shortcut-icon lavender">
+                  <Compass size={20} />
+                </span>
+                <span>
+                  <strong>Find your crowd</strong>
+                  <small>Explore a shared interest.</small>
+                </span>
+                <ArrowUpRight size={18} />
+              </button>
+            </div>
+            <div className="inbox-section-heading">
+              <h2>
+                Conversations{" "}
+                <span className="conversation-total">
+                  {conversations.length}
+                </span>
+              </h2>
+              <span className="inbox-section-note">
+                <Smile size={14} /> Pick up where you left off
+              </span>
+            </div>
             {conversations.length ? (
               <div className="conversation-list">
                 {conversations.map((room) => (
@@ -1784,7 +1925,7 @@ export function App() {
                     </span>
                     <span className="conversation-presence">
                       <i className={room.online > 0 ? "online" : ""} />
-                      {room.online}
+                      {room.online} online
                     </span>
                     <ArrowUpRight size={17} className="conversation-open" />
                   </button>
@@ -1796,8 +1937,11 @@ export function App() {
                   <MessageCircle size={23} />
                 </span>
                 <div>
-                  <h3>No chats yet</h3>
-                  <p>Your conversations will show up here.</p>
+                  <h3>A little quiet. A lot of possibility.</h3>
+                  <p>
+                    Start a room or say hello to someone new. Your chats will
+                    live here.
+                  </p>
                 </div>
                 <button
                   className="text-button"
@@ -1846,11 +1990,7 @@ export function App() {
             {user && (
               <details className="past-chat-details">
                 <summary>
-                  <img
-                    className="archive-icon"
-                    src="/archive-icon.png"
-                    alt=""
-                  />
+                  <Archive className="archive-icon" aria-hidden="true" />
                   <span>Past quick chats</span>
                   <span className="count">{history.length}</span>
                   <ChevronDown size={17} aria-hidden="true" />
@@ -1866,11 +2006,7 @@ export function App() {
                           className="conversation-avatar stranger"
                           aria-hidden="true"
                         >
-                          <img
-                            className="archive-icon"
-                            src="/archive-icon.png"
-                            alt=""
-                          />
+                          <Archive className="archive-icon" />
                         </span>
                         <span className="conversation-copy">
                           <strong>{match.display_name}</strong>
@@ -2850,8 +2986,8 @@ export function App() {
             aria-pressed={mobileNavSelection === "newChat"}
             onClick={() => setModal("newChat")}
           >
-            <span className="mobile-nav-icon mobile-nav-image-icon">
-              <img src="/new-chat-icon.png" alt="" />
+            <span className="mobile-nav-icon">
+              <Plus size={22} />
             </span>
             <span className="mobile-nav-label">New chat</span>
           </button>

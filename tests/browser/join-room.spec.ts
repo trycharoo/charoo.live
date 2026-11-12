@@ -55,7 +55,7 @@ test("a visitor can unblock the host from their profile and retry the invitation
     page.getByRole("button", { name: "Unblock", exact: true }),
   ).toHaveCount(0);
   expect(deletedId).toBe(visualIds.peer);
-  await page.getByRole("button", { name: "Your rooms", exact: true }).click();
+  await page.getByRole("button", { name: "Chats", exact: true }).click();
   await page
     .getByRole("button", { name: "Join this room", exact: true })
     .click();
@@ -68,8 +68,8 @@ test("a visitor can unblock the host from their profile and retry the invitation
 async function openJoin(page: Page) {
   await page.goto("/");
   await page
-    .locator(".hero-actions")
-    .getByRole("button", { name: "Join a room", exact: true })
+    .locator(".chat-shortcuts")
+    .getByRole("button", { name: /Have an invite/ })
     .click();
   await expect(
     page.getByRole("dialog", { name: "Join a room", exact: true }),

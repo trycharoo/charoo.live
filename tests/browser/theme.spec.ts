@@ -68,10 +68,7 @@ test("custom colors apply immediately, persist, and can be reset", async ({
     page.getByLabel("Background color", { exact: true }),
   ).toHaveValue("#142424");
   await page.getByRole("button", { name: "Reset to default" }).click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-palette",
-    "lavender",
-  );
+  await expect(page.locator("html")).toHaveAttribute("data-palette", "pop");
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog", { name: "Make it yours" })).toHaveCount(
     0,

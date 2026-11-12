@@ -13,6 +13,20 @@ interface Palette {
 }
 export const palettes: Palette[] = [
   {
+    id: "pop",
+    name: "Pop",
+    description: "A little louder. A lot more you.",
+    dark: { accent: "#ffe24a", background: "#19191d" },
+    light: { accent: "#ffe24a", background: "#fffdf5" },
+  },
+  {
+    id: "fern",
+    name: "Fern",
+    description: "A fresh place to connect",
+    dark: { accent: "#83cbb0", background: "#111b17" },
+    light: { accent: "#26745c", background: "#f5f7f6" },
+  },
+  {
     id: "sunshine",
     name: "Sunshine",
     description: "Bright, easy conversations",
@@ -70,11 +84,11 @@ export interface ThemePreferences {
 export const THEME_STORAGE_KEY = "charoo.theme.v2";
 export const LEGACY_THEME_STORAGE_KEY = "charoo.theme.v1";
 export const defaultTheme: ThemePreferences = {
-  palette: "sunshine",
+  palette: "pop",
   appearance: "light",
   custom: {
-    dark: { accent: "#ffd21f", background: "#171717" },
-    light: { accent: "#ffd21f", background: "#fafaf8" },
+    dark: { accent: "#ffe24a", background: "#19191d" },
+    light: { accent: "#ffe24a", background: "#fffdf5" },
   },
 };
 const validColor = (value: unknown, fallback: string) =>
@@ -120,6 +134,28 @@ export function parseTheme(value: string | null): ThemePreferences {
   } catch {
     return defaultTheme;
   }
+}
+export function migrateTheme(
+  preferences: ThemePreferences,
+  legacy = false,
+): ThemePreferences {
+  const previousDefaults = legacy ? ["lavender"] : ["fern", "sunshine"];
+  const previousDefault = palettes.find(
+    (palette) =>
+      previousDefaults.includes(palette.id) &&
+      preferences.palette === palette.id,
+  );
+  if (!previousDefault) return preferences;
+  const isPreviousDefault =
+    preferences.palette === previousDefault.id &&
+    preferences.appearance === (legacy ? "dark" : "light") &&
+    (["dark", "light"] as const).every(
+      (mode) =>
+        preferences.custom[mode].accent === previousDefault[mode].accent &&
+        preferences.custom[mode].background ===
+          previousDefault[mode].background,
+    );
+  return isPreviousDefault ? defaultTheme : preferences;
 }
 const rgb = (hex: string) =>
   [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16));
@@ -187,11 +223,16 @@ export function resolveTheme(
       ? candidate
       : mix(bg, opposite, amount);
   };
-  const panel = surface(0.045),
-    raised = surface(0.075),
-    hover = surface(0.1);
-  const sidebar = surface(0.02),
-    input = surface(0.015);
+  const lightSurface = (amount: number) => {
+    const candidate = mix(bg, "#ffffff", amount);
+    return contrast(ink, candidate) >= 4.5 ? candidate : bg;
+  };
+  const light = ink === "#000000";
+  const panel = light ? lightSurface(0.85) : surface(0.045),
+    raised = surface(light ? 0.025 : 0.075),
+    hover = surface(light ? 0.045 : 0.1);
+  const sidebar = light ? lightSurface(0.9) : surface(0.02),
+    input = light ? lightSurface(0.94) : surface(0.015);
   const surfaces = [bg, panel, raised, hover, sidebar, input];
   const tinted = (color: string, amount: number) => {
     const candidate = mix(bg, color, amount);
@@ -222,8 +263,11 @@ export function resolveTheme(
     danger.background,
     info.background,
   ];
-  const text = readable(mix(bg, ink, 0.94), allSurfaces);
-  const muted = readable(mix(bg, ink, 0.65), allSurfaces);
+  const text = readable(
+    mix(mix(bg, ink, light ? 0.88 : 0.94), accent, 0.04),
+    allSurfaces,
+  );
+  const muted = readable(mix(bg, ink, light ? 0.59 : 0.65), allSurfaces);
   const subtle = readable(mix(bg, ink, 0.5), allSurfaces);
   const variables: Record<string, string> = {
     "--bg": bg,
@@ -235,8 +279,9 @@ export function resolveTheme(
     "--text": text,
     "--muted": muted,
     "--subtle": subtle,
-    "--line": mix(bg, ink, 0.16),
-    "--line-strong": mix(bg, ink, 0.28),
+    "--line": mix(bg, ink, light ? 0.09 : 0.16),
+    "--line-strong": mix(bg, ink, light ? 0.18 : 0.28),
+    "--shadow-ink": light ? "#19191d" : "#000000",
     "--accent": accent,
     "--accent-hover": mix(
       accent,

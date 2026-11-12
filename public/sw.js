@@ -1,4 +1,4 @@
-const CACHE = "charoo-shell-v3";
+const CACHE = "charoo-shell-v5";
 const SHELL = [
   "/",
   "/icon-192.png",

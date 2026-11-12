@@ -201,7 +201,7 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "One link. Everyone’s in." }),
+    page.getByRole("heading", { name: "Your chats." }),
   ).toBeVisible();
   await expect(page.locator("body")).not.toContainText("18+");
   await page.getByRole("button", { name: "Start a room", exact: true }).click();
@@ -271,7 +271,9 @@ test("desktop guest creates an unlisted room, sends a message, and reloads the s
     await expect(
       guestPage.getByText(/Request to join.*is pending/),
     ).toBeVisible();
-    await expect(page.getByRole("heading", { name: /Join requests/ })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Join requests/ }),
+    ).toBeVisible();
     await expect(page.getByText("Coffee guest")).toBeVisible();
     await page.getByRole("button", { name: "Accept", exact: true }).click();
     await expect(
@@ -452,7 +454,7 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "One link. Everyone’s in." }),
+    page.getByRole("heading", { name: "Your chats." }),
   ).toBeVisible();
   expect(
     await page.evaluate(
@@ -475,7 +477,10 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   await page.getByRole("button", { name: "Continue as guest" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle menu" }).click();
-  await page.getByRole("button", { name: "Your rooms", exact: true }).click();
+  await page
+    .getByRole("navigation", { name: "Main navigation", exact: true })
+    .getByRole("button", { name: "Chats", exact: true })
+    .click();
   await page.getByRole("button", { name: "Start a room", exact: true }).click();
   await page.getByLabel("Room title").fill("Mobile host room");
   await page.getByRole("button", { name: "Create & get a link" }).click();
@@ -516,7 +521,7 @@ test("mobile navigation, dialog and layout fit the viewport", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Close room", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "One link. Everyone’s in." }),
+    page.getByRole("heading", { name: "Your chats." }),
   ).toBeVisible();
   expect(
     await page.evaluate(
