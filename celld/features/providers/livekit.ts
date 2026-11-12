@@ -51,7 +51,7 @@ export async function endCall(env: Env, id: string) {
       },
       body: JSON.stringify({ room: `call-${id}` }),
       signal: AbortSignal.timeout(10000),
-      redirect: "error",
+      redirect: "manual",
     },
   );
   requireThat(res.ok || res.status === 404, 503, "Call termination pending");

@@ -230,7 +230,7 @@ export function mediaRoutes(app: Hono<HttpEnv>) {
           stripMetadata: true,
         }),
         signal: AbortSignal.timeout(30000),
-        redirect: "error",
+        redirect: "manual",
       });
       requireThat(res.ok, 503, "Scanning temporarily unavailable");
       const v = z
