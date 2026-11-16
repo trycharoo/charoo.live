@@ -21,6 +21,7 @@ export const workerEnvironment = {
     "AI_API_KEY",
     "AI_MODEL",
     "TRUSTED_CLIENT_IP_HEADER",
+    "CRAWLER_REQUESTS_PER_MINUTE",
     "ADMIN_NO_AUTH",
   ] as const,
 };
@@ -85,6 +86,8 @@ export interface Env {
   AI_API_KEY?: string;
   AI_MODEL?: string;
   TRUSTED_CLIENT_IP_HEADER?: string;
+  CRAWLER_REQUESTS_PER_MINUTE?: string;
+  ASSETS?: { fetch(request: Request): Promise<Response> };
   ADMIN_NO_AUTH?: string;
   DB: D1Database;
   MEDIA: R2Bucket;

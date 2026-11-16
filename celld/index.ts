@@ -2,11 +2,11 @@ export { Room } from "./durable-objects/room";
 export { AppCoordinator } from "./durable-objects/app";
 export { Matcher } from "./durable-objects/matcher";
 export { UserHub, Discovery, RateLimiter } from "./durable-objects/hubs";
-import { app } from "./http/app";
+import { fetchRequest } from "./http/gateway";
 import { coordinator, roomStub } from "./shared/data";
 import type { Env, Job } from "./env";
 export default {
-  fetch: app.fetch,
+  fetch: fetchRequest,
   async queue(batch: MessageBatch<Job>, env: Env) {
     for (const message of batch.messages) {
       try {
