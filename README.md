@@ -103,6 +103,14 @@ When carrying an environment file over from the original application, remove the
 
 `selectWorkerEnvironment` ignores variables outside the allowlist when generating Worker bindings. Remove obsolete credentials from private application env files as well, so those files describe only the services this app uses.
 
+### Crawler rate limits
+
+Cloudflare production and staging limit self-declared crawlers to **30 requests per minute per IP**, shared across pages, assets and API paths. Set the nonsecret `CRAWLER_REQUESTS_PER_MINUTE` variable to a positive integer to tune this allowance; invalid/missing values use 30. Excess requests receive `429`, `Retry-After: 60` and `Cache-Control: no-store`. A limiter outage returns `503` to identified crawlers. Health checks are exempt. Only the configured ingress IP header is trusted (`CF-Connecting-IP` on Cloudflare); absent trusted IPs skip the crawler quota. Never configure an arbitrary forwarded header from an untrusted client.
+
+This uses the existing RateLimiter Durable Object and requires no migration or new service. Cloudflare asset requests now invoke the Worker before `ASSETS.fetch`, adding invocation cost for ordinary visitors too. Celld keeps asset-first routing, so local/fleet static files are outside this protection. User-agent identification can be disguised and does not verify a search engine's identity. No crawler gets an exemption based on its claimed name.
+
+Guest access remains available. Existing API protection includes 10 guest-session requests/hour per client key and 180 general API requests/minute. Bots can submit directly without using the form; mandatory login is not required for throttling. Human verification for guest creation would be a separate addition if disguised automation becomes a concern.
+
 ## Architecture and API
 
 [ARCHITECTURE.md](./ARCHITECTURE.md) describes authorities, recovery and the retained Celld conventions.
@@ -150,7 +158,7 @@ The assistant sends a bounded style prompt without conversation history. LiveKit
 
 ## Cloudflare deployment
 
-`wrangler.cloudflare.jsonc` deploys the `charoo-live` Worker with its Durable Objects to Cloudflare, using the existing `charoo-d1-db` D1 database and `charoo-media` R2 bucket. The browser origin is **https://charoo-live.shy-star-eff8.workers.dev**; `vars.WEB_ORIGIN` must match it exactly. This configuration is separate from local Celld development and the fleet deployment below.
+`wrangler.cloudflare.jsonc` deploys the `charoo-live` Worker with its Durable Objects to Cloudflare, using the existing `charoo-d1-db` D1 database and `charoo-media` R2 bucket. The production browser origin is **https://chat.charoo.live**; `vars.WEB_ORIGIN` must match it exactly. This configuration is separate from local Celld development and the fleet deployment below.
 
 ### Staging
 
@@ -182,6 +190,8 @@ For the first deployment, provide `MESSAGE_KEY` through the private, ignored `.s
 ```sh
 pnpm run deploy:cloudflare --secrets-file .secrets.cloudflare.json
 ```
+
+Before each release, check for pending migrations with `pnpm exec wrangler d1 migrations list DB --config wrangler.cloudflare.jsonc --remote` and apply them with `pnpm run db:migrate:cloudflare` before publishing newer code. The deploy script builds and publishes the Worker; it does not apply database migrations. The backend intentionally returns `503` when required migrations are missing.
 
 Later deployments can use `pnpm run deploy:cloudflare` to retain the stored secrets. To add or update a provider secret interactively, run `pnpm run secret:cloudflare KEY`, for example `pnpm run secret:cloudflare GOOGLE_CLIENT_SECRET`. Use the complete provider groups described in `.env.example`: put nonsecret URLs, IDs, model names and email sender settings in `wrangler.cloudflare.jsonc` under `vars`, and upload their secret keys with the secret command. AI and video also need their admin feature flags enabled.
 

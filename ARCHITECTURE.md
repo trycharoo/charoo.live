@@ -610,6 +610,8 @@ assets.run_worker_first = /api/* and /health
 
 Celld's asset layer serves frontend files directly. API and health routes skip asset lookup and run the Worker first. Navigation misses fall back to `index.html`, making the frontend a single-page application.
 
+Cloudflare production/staging instead bind `ASSETS` and set `run_worker_first = true`. The [fetch gateway](./celld/http/gateway.ts) throttles self-declared crawlers before forwarding API/health requests to Hono or frontend requests to `ASSETS.fetch()`. A separate bucket in the existing RateLimiter Durable Object allows 30 requests/minute per trusted client IP (configurable with `CRAWLER_REQUESTS_PER_MINUTE`), shared across paths and crawler identities. Health checks are exempt; missing trusted IPs skip this quota. The asset binding retains SPA fallback and generated headers without initializing the application or looking up sessions. Ordinary browser user agents incur no crawler Durable Object call, though all Cloudflare asset requests now invoke the Worker. Celld's static responses remain outside this gateway. See [ADR-02](./docs/engineering/ARCHITECTURE_DECISIONS.md#adr-02-throttle-self-declared-crawlers-before-asset-and-api-work) for the heuristic and cost limits.
+
 React/Vite compiles Charoo into `dist/`. The build emits `_headers` with CSP, MIME protection and asset cache rules. Browser bundles always use React's production mode for builds, independently of the Worker's local `NODE_ENV`. LiveKit's configured origins are included in the CSP; provider secrets never enter the browser bundle.
 
 ## 20. Production deployment

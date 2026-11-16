@@ -1,44 +1,39 @@
 # Charoo shared engineering handoff
 
-Sanitized summary for the latest Cloudflare staging milestone. Root [SRS.md](../../SRS.md) remains canonical. Recheck repository and external state before continuing.
+Updated **2026-11-16** after authorized crawler implementation and production recovery. [SRS.md](../../SRS.md) remains canonical. Recheck repository and external state before continuing; completed production actions below must not be replayed blindly.
 
 | Field | Current state |
-|---|---|
-| Updated | 2026-11-16 — quick-chat timeout deadline review and local verification |
+| --- | --- |
 | Repository / workspace | Charoo / `dhaka` |
-| Branch / target | `dJangg0/cloudflare-durable-objects-blueprint` / `origin/main` |
-| Starting commit | `39b3cc70ad840669207bbd71a82351683a00abd1` |
-| Objective / state | Quick-chat timeout is implemented for both targets and deployed to staging Worker version `17f1ade6-612c-4112-b9da-579472019756`. Review fixed late reservation past the deadline and added local coverage. Production remains pending OAuth configuration and credential remediation. |
+| Branch / base | `dJangg0/crawler-rate-limit-production-fix` / `origin/main` at `f9fff705664d8079f6860acc988c72914e2dfce6` |
+| Objective / delivery | Add crawler throttling; diagnose and repair production startup; record the change in a new PR. Production recovered and source ready for review. |
+| Production | `charoo-live`, https://chat.charoo.live; version `3b93037b-d14f-4274-8678-9cb82a7f2d91` |
+| Task checkpoint | `.context/handoffs/production-503-root.md`; crawler implementation details in `.context/handoffs/crawler-rate-limit-root.md` |
 
-## Delivered
+## Implementation
 
-- Added `wrangler.staging.jsonc` for `charoo-live-staging`, with separate D1, R2, Queues, and Durable Object namespaces; added staging build, deploy, migration and secret scripts.
-- Created staging D1 (`charoo-d1-staging`), R2 (`charoo-media-staging`), queue (`charoo-jobs-staging`) and dead-letter queue (`charoo-jobs-staging-dead-letter`) in the configured `project` account.
-- Applied all five existing D1 migrations, generated a separate staging `MESSAGE_KEY`, and deployed Worker version `49b9f2a8-1367-4255-9a3a-52257ea21136`.
-- Public staging URL: https://charoo-live-staging.shy-star-eff8.workers.dev
-- The ignored local staging secret file contains the key; its value is not recorded here. Owner should retain a secure backup before relying on staging data.
-- Added a shared 2-minute quick-chat search limit in the frontend and Matcher. The client cancels the server queue and offers retry; the server lease and candidate selection enforce the same deadline. Deployed the change to staging using Wrangler `--keep-vars`; matching behavior was not runtime tested after deployment.
-- A code review found that presence and coordinator calls could outlast a candidate's deadline. Match reservation now carries the earlier queue deadline and rejects an expired reservation before writing match state; expired candidates are removed and the other user's still-live search can continue.
-- Added deterministic Matcher expiry/retry and reservation-boundary tests plus a browser timeout/cancellation scenario. Local `pnpm check` passed (108 tests), and both `tests/browser/random-chat.spec.ts` cases passed. These checks do not verify Cloudflare runtime behavior.
-- Production deployment history confirms user-managed dashboard updates for R2 binding, Google OAuth variables, and `WEB_ORIGIN`. The latest active version still binds `MEDIA` to `charoo-media`.
-- Production configuration needs correction before deployment: active `WEB_ORIGIN` includes the OAuth callback path, and `GOOGLE_CLIENT_SECRET` is configured as a plaintext environment variable rather than a Secret. Staging's dashboard configuration also has `GOOGLE_CLIENT_SECRET` under ordinary variables. Rotate each affected credential and store replacements as Worker Secrets. Do not record values.
+- The fetch gateway reuses RateLimiter for a separate durable per-trusted-IP crawler quota: default 30 requests per 60-second window, configurable through `CRAWLER_REQUESTS_PER_MINUTE`. Paths, methods and crawler identities share allowance. Excess returns `429` with no-store and Retry-After 60; limiter failure returns sanitized `503`; HEAD rejection bodies are empty. Health checks are exempt. Missing trusted IP skips this quota.
+- Cloudflare production/staging use Worker-first routing and `ASSETS.fetch` for frontend files, retaining asset headers and SPA fallback without application/session work. Ordinary browser agents skip crawler RPCs. All Cloudflare assets now invoke Worker; crawler checks add DO calls. Celld retains asset-first behavior, so its static files are outside this quota.
+- Guest access and optional sign-in remain available. Existing guest-session quota is 10/hour per client key; general API quota is 180/minute. No mandatory login or CAPTCHA added. User-agent detection is evadable, and shared/distributed IPs limit precision. Traffic effectiveness and cost remain unmeasured.
+- SRS BE-05, architecture/README, ADR-02 and the implementation matrix record the contract and verification limits.
 
-## Verification and limits
+## Production incident and authorized recovery
 
-- PASS: `pnpm run deploy:cloudflare:staging:dry-run` — type checks, frontend build and Wrangler binding/config dry-run.
-- PASS: `pnpm run db:migrate:cloudflare:staging` — migrations 0001–0005 applied; remote migration list reports none pending.
-- PASS: `pnpm build:cloudflare:staging` and Wrangler deploy with staging secrets — deployed Worker and all configured bindings.
-- PASS: `pnpm typecheck` after the quick-chat timeout change.
-- PASS: `pnpm run deploy:cloudflare:staging:dry-run` and `pnpm run deploy:cloudflare:dry-run` after the original quick-chat timeout change. Both bundle/config checks succeeded; Vite reported existing third-party annotation and chunk-size warnings. These preceded the review's reservation deadline guard.
-- PASS: review verification `pnpm check` (108 tests) and `pnpm exec playwright test tests/browser/random-chat.spec.ts` (2 tests). The browser suite used local Vite on port 55000. No Cloudflare deployment/build was run for the review fix.
-- NOTE: `pnpm format:check` reports pre-existing formatting warnings in `tests/fr12.test.ts` and `tests/ports.test.ts`; neither file is part of this task's diff.
-- PASS: staging build and `pnpm exec wrangler deploy --config wrangler.staging.jsonc --keep-vars`; deployed Worker version `17f1ade6-612c-4112-b9da-579472019756`. Wrangler reported dashboard/local config differences; `--keep-vars` was used to retain dashboard-managed OAuth variables. No application runtime check was run after this deployment.
-- PASS: staging `/api/auth/providers` returned `{"google":true}` during OAuth troubleshooting. Production version metadata was inspected read-only; the sensitive value was not retained in this handoff.
-- PASS: HTTP GET `/` returned 200; GET `/health` returned `{"status":"ok"}`.
-- Not verified: guest/session creation, room writes, WebSocket reconnect, media scanning, external providers, load/capacity and production runtime. No automated application tests were run in this deployment task.
-- Existing IMP-01 and IMP-03 access-control findings remain open; IMP-02 remains open if video is enabled. Use synthetic staging data only until resolved.
-- At the original staging setup, production D1 had zero tables. Recheck before migrations. Later user-managed production Worker changes are recorded above; no production mutation was made by this task.
+- After the user's deployment of version `bc3048a6-3db6-4392-906b-ed00ed51bbef`, HTML loaded but API health returned `503`. Metadata-only checks confirmed production had migrations 0001–0004 but lacked `0005_profile_pictures.sql`. The existing readiness gate correctly refused startup. The deploy script publishes code; it does not apply database migrations.
+- The same deployment reverted WEB_ORIGIN to the Workers URL; custom-domain Origin requests failed `403`. The checked-in production origin and README now use `https://chat.charoo.live`, guarded by a regression assertion.
+- The user explicitly authorized the fix and a new PR. Applied existing migration **0005** to production D1 `7db6b08c-c9ef-44ae-8815-0c789eac81ff` at **2026-11-16 14:41:40 UTC**. It adds the profile-picture table/index; no deletion or backfill. No migrations remain pending.
+- Published corrected production Worker version **`3b93037b-d14f-4274-8678-9cb82a7f2d91`**, created **2026-11-16T14:42:12.918Z**. Existing resource identities and secret bindings retained; secrets were not replaced. Do not reapply migrations or deploy again without checking current state and the next task's scope.
+- Verified both production hostnames: API health `200`; custom-origin provider discovery `200` with exact CORS; unauthenticated account access `401`; foreign origins `403`. Google provider availability remains true. No real user sessions, conversations, signed-in workflows or provider completion were exercised.
+
+## Verification and continuity
+
+- PASS: `pnpm check`, **138 tests**, including **30** crawler/config/guest cases. Focused HTTP/crawler origin-correction checks also passed **44/44**.
+- PASS: production/staging builds and dry runs; final production build/publish; targeted source/test Prettier; `git diff --check`. Existing third-party annotation/chunk-size warnings remain.
+- PASS: isolated actual local workerd/DO smoke for SPA/assets/API routing, retained headers, shared quota, HEAD, IP/browser behavior and health. Setup/results are ignored under `.context/crawler-cloudflare/`; lasting regressions are tracked in `tests/crawler-rate-limit.test.ts`. Temporary runtime stopped.
+- No full browser/native suite rerun for this gateway change. Remote smoke does not certify signed-in behavior, load or quota effectiveness. Existing IMP-01/IMP-03 access-control issues and conditional IMP-02 remain open.
+- Fresh PR branch created without renaming the original workspace branch. Preserve the user's unrelated Celld Worker-name change in `wrangler.jsonc` and earlier diagnostic documentation outside this PR. Do not add `.context`, credentials or private content to Git.
+- Existing isolated staging resources/migrations/separate key remain; this recovery changed production only. Preserve its key backup. Cloudflare Builds automation configuration remains unverified; repository CI checks code but does not publish it.
 
 ## Next action
 
-Rotate the staging and production Google client secrets and store them as Worker Secrets. Set production `WEB_ORIGIN` to `https://charoo.live` only; keep the Google authorized redirect URI as `https://charoo.live/api/auth/google/callback`. Reconcile production Wrangler configuration with dashboard OAuth variables before deployment, then deploy the timeout to production and verify both runtimes. The original timeout version is deployed to staging; the reservation-boundary review fix has not been deployed, and staging behavior still needs runtime verification. Preserve the existing SRS access-control findings and staging-key backup.
+Review/merge the crawler and production-origin change into `main`. Production is already recovered; merging alone does not require repeating the live repair. Recheck the actual deployed version and migration state before any future release. If disguised guest automation becomes a confirmed issue, evaluate a separately scoped human-verification layer.
