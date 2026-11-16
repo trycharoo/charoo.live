@@ -202,7 +202,7 @@ Secrets are available to the Worker and its Durable Objects through `env`; keep 
 Hosting provisioning and publishing are separate from this migration. Use an existing running Celld fleet with its normal host credentials.
 
 1. Copy `.env.prod.example` to an ignored application env file, fill `MESSAGE_KEY`, HTTPS `WEB_ORIGIN` and desired provider groups. Preserve the key across deployments: existing ciphertext and invitation links depend on it.
-2. Configure TLS and ingress routing for the existing Worker name **`celld-boilerplate`**. For per-client anonymous limits, set `TRUSTED_CLIENT_IP_HEADER` only to a header the ingress strips and supplies. Without it, anonymous clients share a conservative limiter and authenticated clients have individual limits.
+2. Configure TLS and ingress routing for the configured Celld Worker name **`charoo-live`**. For per-client anonymous limits, set `TRUSTED_CLIENT_IP_HEADER` only to a header the ingress strips and supplies. Without it, anonymous clients share a conservative limiter and authenticated clients have individual limits.
 3. Apply D1 migrations through the native fleet CLI:
 
    ```sh

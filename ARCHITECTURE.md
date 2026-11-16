@@ -17,7 +17,7 @@ Read [SRS.md](./SRS.md) for the current product and implementation contract and 
 | Discovery / RateLimiter                      | Permission-checked discovery invalidations / anonymous HTTP limits                                                                               |
 | R2 / Queues / Cron                           | Private quarantine/approved media, retry delivery and cleanup                                                                                    |
 
-`room_index`, `membership_index`, `invite_index` and `entity_index` in D1 are query aids. Every history, upload, download, socket event and mutation asks the authoritative Room. UUID addresses and `charoo_` SQLite tables isolate application rooms from old demo data. Cloudflare uses Worker `charoo-live`; the Celld target retains `celld-boilerplate`. Preserve identities and migration history within each target: `Room` is introduced by `v1`, and `v2` appends the other classes.
+`room_index`, `membership_index`, `invite_index` and `entity_index` in D1 are query aids. Every history, upload, download, socket event and mutation asks the authoritative Room. UUID addresses and `charoo_` SQLite tables isolate application rooms from old demo data. Cloudflare and Celld are configured with Worker name `charoo-live` in their separate deployment targets. Preserve identities and migration history within each target: `Room` is introduced by `v1`, and `v2` appends the other classes.
 
 ## Commit and recovery protocol
 

@@ -6,7 +6,7 @@ Updated **2026-11-16** after authorized crawler implementation and production re
 | --- | --- |
 | Repository / workspace | Charoo / `dhaka` |
 | Branch / base | `dJangg0/crawler-rate-limit-production-fix` / `origin/main` at `f9fff705664d8079f6860acc988c72914e2dfce6` |
-| Objective / delivery | Add crawler throttling; diagnose and repair production startup; record the change in a new PR. Production recovered and source ready for review. |
+| Objective / delivery | Add crawler throttling; diagnose and repair production startup; record the change in a new PR. Production recovered; [PR #15](https://github.com/trycharoo/charoo.live/pull/15) is open. The user subsequently requested committing and pushing all remaining workspace changes. |
 | Production | `charoo-live`, https://chat.charoo.live; version `3b93037b-d14f-4274-8678-9cb82a7f2d91` |
 | Task checkpoint | `.context/handoffs/production-503-root.md`; crawler implementation details in `.context/handoffs/crawler-rate-limit-root.md` |
 
@@ -25,13 +25,17 @@ Updated **2026-11-16** after authorized crawler implementation and production re
 - Published corrected production Worker version **`3b93037b-d14f-4274-8678-9cb82a7f2d91`**, created **2026-11-16T14:42:12.918Z**. Existing resource identities and secret bindings retained; secrets were not replaced. Do not reapply migrations or deploy again without checking current state and the next task's scope.
 - Verified both production hostnames: API health `200`; custom-origin provider discovery `200` with exact CORS; unauthenticated account access `401`; foreign origins `403`. Google provider availability remains true. No real user sessions, conversations, signed-in workflows or provider completion were exercised.
 
+## Historical deployment review
+
+[Deployment drift review](DEPLOYMENT_DRIFT_REVIEW.md) preserves the read-only investigation before the production rollout and recovery. Its older versions, missing-feature observations and production-origin discrepancy describe that snapshot; the recovery above supersedes those states. Earlier metadata found the newer source already on main while production served older code, and could not inspect Workers Builds trigger settings. No changes to deployment automation were made.
+
 ## Verification and continuity
 
 - PASS: `pnpm check`, **138 tests**, including **30** crawler/config/guest cases. Focused HTTP/crawler origin-correction checks also passed **44/44**.
 - PASS: production/staging builds and dry runs; final production build/publish; targeted source/test Prettier; `git diff --check`. Existing third-party annotation/chunk-size warnings remain.
 - PASS: isolated actual local workerd/DO smoke for SPA/assets/API routing, retained headers, shared quota, HEAD, IP/browser behavior and health. Setup/results are ignored under `.context/crawler-cloudflare/`; lasting regressions are tracked in `tests/crawler-rate-limit.test.ts`. Temporary runtime stopped.
-- No full browser/native suite rerun for this gateway change. Remote smoke does not certify signed-in behavior, load or quota effectiveness. Existing IMP-01/IMP-03 access-control issues and conditional IMP-02 remain open.
-- Fresh PR branch created without renaming the original workspace branch. Preserve the user's unrelated Celld Worker-name change in `wrangler.jsonc` and earlier diagnostic documentation outside this PR. Do not add `.context`, credentials or private content to Git.
+- No full browser/native suite rerun locally for this gateway change. The GitHub PR workflow for commit `3aec7e4` passed its configured checks, including native/browser scenarios and deployment dry run. The push workflow for that same commit hit an existing responsive button-height assertion at `43.99993896484375px` versus `44px`; no UI source changed. Remote smoke does not certify signed-in behavior, load or quota effectiveness. Existing IMP-01/IMP-03 access-control issues and conditional IMP-02 remain open.
+- Fresh PR branch created without renaming the original workspace branch. The user subsequently authorized including the remaining Celld Worker-name change (`charoo-live` in `wrangler.jsonc`) and historical deployment-review documentation in this PR. No additional deployment is part of that commit/push request. Do not add `.context`, credentials or private content to Git.
 - Existing isolated staging resources/migrations/separate key remain; this recovery changed production only. Preserve its key backup. Cloudflare Builds automation configuration remains unverified; repository CI checks code but does not publish it.
 
 ## Next action
